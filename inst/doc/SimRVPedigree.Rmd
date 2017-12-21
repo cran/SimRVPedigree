@@ -1,0 +1,448 @@
+---
+title: "SimRVPedigree"
+author: "Christina Nieuwoudt, Jinko Graham"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_document
+vignette: >
+  %\VignetteIndexEntry{SimRVPedigree}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+<style type="text/css">
+
+body{ /* Normal  */
+   font-size: 16px;
+}
+</style>
+
+# Table of contents
+1. [Introduction](#introduction)
+2. [Individual and Pedigree Specific Assumptions](#PedLevel)
+3. [Study Design/Ascertainment Scheme Features](#StudyLevel)
+4. [`sim_RVped()` Arguments](#simRVped)
+5. [Example Application to Family-Based Study](#Example)
+6. [Parallel Processing Example](#ParProcExample)
+7. [References](#Ref)
+
+
+#1. Introduction <a name="introduction"></a>
+
+Family-based studies to identify genetic susceptibility factors associated with disease have received renewed attention in recent years.  The resurgence in popularity is due to the fact that family-based studies have more power to detect rare variants, require smaller sample sizes, and can more accurately detect sequencing errors than case-control studies [9].  However, garnering a suitable number of families for analysis could require decades of continued collaboration between researchers and clinicians.  As a result, these studies and their findings are difficult to replicate.  The `SimRVPedigree` package aims to address this problem by providing a platform to simulate families ascertained to contain multiple disease-affected relatives. 
+
+The distinguishing feature of the `SimRVPedigree` package is that it aims to mimic the process of family development, while allowing users to incorporate multiple facets of family ascertainment.  To illustrate and fully explain these features, in the next two sections, we first discuss the assumptions made in simulation, and next provide a comprehensive description of the study design features available to users.  Later we provide an example, which illustrates an application of `SimRVPedigree` to simulate pedigrees for a specific family-based study.
+
+#2. Individual and Pedigree Specific Assumptions <a name="PedLevel"></a>
+1. Given a sample of pedigrees we allow for the possibility that different families may segregate different rare variants, but make the assumption that within a family genetic cases are due to a shared rare variant that increases disease susceptibility.
+
+2. With respect to how the causal variant is introduced to the pedigree we allow users to choose from one of the following two assumptions:
+    + a. Assume that the variant is rare enough that a single copy has been introduced by one founder, and begin the simulation of the pedigree with this founder, as in [2].
+    + b. Simulate the starting founder's rare-variant status with probability equal to the carrier probability of the rare variant in the population.  We note that under this setting pedigrees may not segregate the rare variant.
+    
+3. When the rare variant is present, we transmit it from parent to offspring according to Mendel's laws.
+
+4. We assume that, given an individual's current age, their time to disease onset is the waiting time in a non-homogeneous Poisson process with an age-specific hazard rate that follows a proportional hazards model.  In this model, individuals who have NOT inherited the causal variant experience disease onset according to the baseline, age-specific, hazard rate of disease.  On the other hand, individuals who have inherited the rare variant are assumed to have an increased risk of disease relative to those who have not inherited it.  The user is expected to supply the population, age-specific, hazard rate of disease, the allele frequency of causal variants, and the relative-risk of disease for genetic cases.
+
+5. We assume that, given an individual's current age, their time to death is the waiting time in a non-homogeneous Poisson process with age-specific hazard rate determined by their affection status.  We assume that unaffected individuals experience death according to the age-specific hazard rate for death in the unaffected population; if the disease of interest is sufficiently rare, the user may instead choose to substitute the population age-specific hazard rate for death in the general population.  We assume that affected individuals experience death according to the age-specific hazard rate for death in the affected population.  The user is expected to supply both of these age-specific hazard rates.
+
+6. We assume that, given an individual's current age, their time to reproduction is the waiting time in a homogeneous Poisson process.  That is, we assume that individuals reproduce at uniform rate during their reproductive years.  For example, one's reproductive years may span from age 18 to age 45 years.  We do not allow for offspring to be produced outside of the birth range specified by the user.
+
+7. We do not model disease remission. Rather, we impose the restriction that individuals may only experience disease onset once, and remain affected from that point on.  After disease onset occurs the affected hazard rate for death is applied.
+
+#3. Study Design/Ascertainment Scheme Features <a name="StudyLevel"></a>
+The `sim_RVped` function is used to randomly simulate families ascertained to have multiple affected relatives. The study design features available to the user are specified via the following arguments:
+
+1. `num_affected`: the minimum number of relatives affected by the disease of interest in each pedigree. 
+
+2. `ascertain_span`: The span, in years, in which the family-based study ascertains families for analysis.  We require that the proband, i.e. the affected family member who enlists the family for analysis, experienced disease onset during the ascertainment period.  Additionally, when `num_affected` = $n$ affected family members are requested, we require that at the time of ascertainment the proband is at least the $n^{th}$ affected.  For example, suppose that we would like to mimic a family-based study that requires at least 3 affected members per family.  Presumably, the family would be ascertained for study when the proband, upon speaking to the clinician, informs the clinician that he or she is aware of at least 2 family members who are also affected by the disease of interest.  We also require that this condition is met when simulating families with incomplete ascertainment, discussed next.
+
+4. `recall_probs`: the proband's recall probabilities for relatives, i.e. a list of length $q$ such as $p = (p_1, p_2, ..., p_q)$.  In this context, $p_i$ is used to denote the proband's recall probability for a relative of degree $i$ when $i = 1, 2, ..., q-1$, or the proband's recall probability for a relative of degree $q$ or greater when $i = q$.
+This option is included to allow researchers to model the possibility that a proband either cannot provide a complete family history or that they explicitly request that certain family members not be contacted.  To simulate fully ascertained families simply specify `recall_probs = c(1)` so that the proband's recall probability of all relatives is 1.  If `recall_probs` is unspecified, the default values of four times the kinship coefficient, as defined in [8], between the proband and his or her relatives are assumed, which has the effect of retaining all first-degree relatives with probability 1, retaining all second-degree relatives with probability 0.5, retaining all third-degree relatives with probability 0.25, etc.
+
+3. `stop_year`: the stop year represents either: the year that the study ends or the last full year that data have been collected.  All events that occur after the stop year are censored.
+
+#4. `sim_RVped` Arguments <a name="simRVped"></a>
+
+To simulate a pedigree with `sim_RVped` the user must specify:
+
+1. `hazardDF`: a data frame with:
+     1. column 1: the age-specific hazard rate for disease in the population.
+     2. column 2: the age-specific hazard rate for death in the unaffected population.
+     3. column 3: the age-specific hazard rate for death in the affected population.
+   If the disease of interest is sufficiently rare, at the user's discretion, column 2 may be approximated by the population age-specific hazard rate for death. 
+2. `partition`: a partition of ages over which to apply the age-specific hazard rates in `hazardDF`.
+3. `GRR`: the genetic relative-risk, i.e. the relative-risk of disease for individuals who have inherited the rare variant. 
+4. `carrier_prob`: the carrier probability of all causal variants considered as a group. 
+5. `FamID`: the family ID to assign to the simulated pedigree.
+6. `founder_byears`: the span of years from which to simulate, uniformly, the founder's birth year.
+7. `ascertain_span`: the year span of the ascertainment period.  This period represents the range of years during which the proband developed disease and the family would have been ascertained for multiple affected relatives. 
+8. `num_affected`: the minimum number of affected individuals in the pedigree. 
+
+Optional arguments:
+
+9. `stop_year`: the last year of study.  If missing, the current year is used.
+10. `recall_probs`: the proband's recall probabilities for relatives, as described in section 3.  If missing, four times kinship coefficient between the proband and the relative is used.
+11. `RVfounder`: A logical variable indicating whether the pedigree will segregate the rare variant.  When `RVfounder = TRUE` the pedigree will segregate the causal rare-variant, which is introduced by the starting founder.  However, when `RVfounder = FALSE` we allow the starting founder to introduce the causal variant with probability equal to `carrier_prob`.  Therefore, when `RVfounder = FALSE` the simulated pedigree may not segregate the causal variant.  By default, `RVfounder = FALSE`.
+12. `birth_range`: the minimum and maximum allowable ages, in years, between which individuals may reproduce.  By default, `birth_range = c(18, 45)`.
+13. `NB_params`: the size and probability parameters of the negative binomial distribution used to model the number of children per household. By default, `NB_params = c(2, 4/7)`, this setting is due to the findings of Kojima and Kelleher [4].
+14. `fert`: A constant used to rescale the birth rate after disease onset.  By default, `fert = 1`. 
+
+We will illustrate the usage and output of this function in the next section.
+
+#5. Example Application to Family-Based Study <a name="Example"></a>
+Suppose that, from 1995 to 2010, researchers ascertained 100 families that contained at least two, related individuals affected by a lymphoid cancer.  Data was collected for the 100 families until the year 2017.  Researchers believe that affected members within a family share a rare variant that increases disease susceptibility.  They make the simplifying assumption that all individuals carrying a genetic susceptibility variant share the same relative-risk of disease.  They believe that the population allele frequency of all causal rare variants is roughly 0.002.  They also believe that carriers of the susceptibility variant are 10 times more likely to develop lymphoid cancer than non-carriers.
+
+Researchers are confident that all affected family members have been fully ascertained.  Upon inspecting the founders in the ascertained families, they see that all were born between 1900 and 1920.
+
+Based on the description of the family-based study described above, and referring to the input requirements in the last section, to simulate families ascertained by this study with the `sim_RVped` function, users will set:
+
+1. `num_affected` = 2
+2. `ascertain_span` = c(1995, 2010)
+3. `stop_year` = 2017
+4. `GRR` = 10
+5. `carrier_prob` = 0.002
+6. `recall_probs` = c(1)
+7. `founder_byears` = c(1900, 1920)
+
+Additionally, the user will need to specify:
+
+1. `hazardDF`: a data frame with 3 columns:
+   1. `hazardDF[, 1]`: the population age-specific hazard rate for lymphoid cancer.
+   2. `hazardDF[, 2]`: the age-specific hazard rate for death in the unaffected population, i.e. individuals who have NOT had lymphoid cancer.
+   3. `hazardDF[, 3]`: the age-specific hazard rate for death in the affected population, i.e. individuals who have had lymphoid cancer.
+2. `partition`: a partition of ages over which to apply the age-specific hazard rates in `hazardDF`.
+
+For individuals studying lymphoid cancer in the United States, the age-specific hazard rates of lymphoid cancer and of death in the affected population may be estimated by a program such as the Surveillance, Epidemiology, and End Results Program (SEER) [6].  Furthermore, since death by lymphoid cancer accounts for a relatively small proportion of all death causes in the general population, the user may choose to approximate the hazard rates of death in the unaffected population by the age-specific hazard rates of death in the general population, which can be estimated from actuarial life tables such as those provided by the U.S. Social Security Administration [1].
+
+For the sake of illustration, suppose that the family study in the example was conducted in the United States.  The `AgeSpecific_Hazards` data set included with the `SimRVPedigree` package contains age-specific hazard rates which were generated to roughly mimic those required for lymphoid cancer onset in the United States as described above.  The three columns in the `AgeSpecific_Hazards` data set provide the required age-specific hazard rates, in yearly increments, beginning at age 0 and ending with age 100.  That is, the values in the first row describe the hazard rates for an individual whose age is contained in the interval [0, 1), while the values in the second row describe the hazard rates for an individual whose age is contained in the interval [1, 2), and so on.  For more information on the `AgeSpecific_Hazards` data set type the command `help(AgeSpecific_Hazards)` into the `R` console.
+
+After installing the `SimRVPedigree` package, we load it by typing the command:
+
+```{r}
+library(SimRVPedigree)
+```
+
+Next, we load the age-specific hazard rates for this application as follows:
+
+```{r}
+# load example hazards 
+data("AgeSpecific_Hazards")
+
+# print first three rows of AgeSpecific_Hazards dataset 
+head(AgeSpecific_Hazards, n = 3)
+```
+
+Looking at the output above, we can see that the `AgeSpecific_Hazards` data set, already specifies the age-specific hazard rates in the order required by `sim_RVped.`  Since the `AgeSpecific_Hazards` data set supplies the age-specific hazard rates in yearly increments starting at age 0 and ending with age 100, we define the partition as follows:
+
+```{r}
+# specify partition of ages
+age_part <- seq(0, 100, by = 1)
+
+# create hazard object
+LC_hazard <- hazard(partition = age_part,
+                    hazardDF = AgeSpecific_Hazards)
+LC_hazard
+```
+
+Next, we plot the age-specific hazard rates against the ages they apply to.
+
+```{r, fig.width = 8, fig.height = 4}
+par(mfrow = c(1, 2), mar = c(5.1, 5.1, 4.1, 2.1))
+
+# plot age-specific hazard rate of disease by age
+plot(x = seq(1, 100, by = 1), y = AgeSpecific_Hazards[,1],
+     xlab = "Age (in years)", ylab = "Hazard Rate of Disease", 
+     main = "Hazard Rate of Disease by Age", 
+     ylim = c(0, 0.002), col = "red3", lwd = 2, type = "s")
+
+# plot age-specific hazard rate of death by age
+plot(x = seq(1, 100, by = 1), y = AgeSpecific_Hazards[,3],
+     xlab = "Age (in years)", ylab = "Hazard Rate of Death",
+     main = "Hazard Rate of Death by Age", 
+     col = "goldenrod2", ylim = c(0, 1), lwd = 2, type = "s")
+lines(x = seq(1, 100, by = 1), y = AgeSpecific_Hazards[,2],
+     col = "dodgerblue", lwd = 2, type = "s")
+
+# create legend to detail population type
+legend("topleft", title = "Population", legend = c("General", "Affected"),
+       col = c("dodgerblue", "goldenrod2"), lwd = 3)
+```
+
+\newpage
+Now we show how `sim_RVped` may be used to simulate a pedigree ascertained for the previously described study.  Here we make the assumption that a causal variant is introduced by one of the two eldest founders. 
+
+```{r}
+# simulate an ascertained pedigree 
+set.seed(3170)
+ex_RVped <- sim_RVped(hazard_rates = LC_hazard,
+                      num_affected = 2,
+                      ascertain_span = c(1995, 2010),
+                      GRR = 10, carrier_prob = 0.002,
+                      RVfounder = TRUE,
+                      stop_year = 2017,
+                      recall_probs = c(1),
+                      founder_byears = c(1900, 1920),
+                      FamID = 1)
+
+# view a summary of ex_RVped 
+summary(ex_RVped)
+```
+
+The `sim_RVped` function returns a list containing two objects of class `ped`.  The first is  named `full_ped` and represents the original pedigree, prior to proband selection and trimming.  The second is named `ascertained_ped` and represents the ascertained pedigree, and includes an additional variable to identify the proband.  Any relatives not recalled by the proband are removed from the ascertained pedigree.  If a relative is not recalled by the proband, but is required to plot the pedigree using the `kinship2` package [7], they are included in the ascertained pedigree, but their information is missing, and they are labelled unavailable.  
+
+Since we are interested in families ascertained for study, we will focus our attention on `ascertained_ped`.  We can view a summary of `ascertained_ped` by executing the following commands. 
+
+```{r}
+# store the ascertained pedigree as ascPed
+ascPed <- ex_RVped$ascertained_ped
+
+# use summary function to view a summary of the ascertained pedigree
+summary(ascPed)
+```
+
+When an object of class ped is supplied to the `summary` function it will return a list containing two data frames. The first, `family_info` contains information for each pedigree supplied to `summary`.  Specifically, for each pedigree `family_info` contains: the family ID, the total number of relatives, the total number of affected relatives, the average onset age of the disease-affected relatives, the average of the pairwise kinship coefficients between the disease-affected relatives, the year the pedigree was ascertained, and a logical variable that indicates if the pedigree is segregating a causal variant. 
+
+The second data frame returned by `summary` contains information for the disease-affected relatives in each pedigree.  This item is called `affected_info`.  For each disease-affected relative in each pedigree supplied, `affected_info` contains: their family ID, their ID, their year of birth, their year of onset, their year of death (when applicable), their relative risk of disease, a logical variable which indicated whether or not they are the proband, and their rare variant status.  
+
+We note that objects of class `ped` inherit from `data.frame`.  Thus, many of the methods for objects of class `data.frame` will also work for objects of class `ped`.  For example, to view the first two lines of `ascPed` we can use the `head` function. 
+
+```{r}
+# determine the class of ascPed
+class(ascPed)
+
+# view first two rows of the ascertained pedigree
+head(ascPed, n = 2)
+```
+
+The columns displayed in the output produced by `head` may be described as follows:
+
+ 1. `FamID`: family identification number 
+ 2. `ID`: individual identification number
+ 3. `sex`: sex identification variable: `sex = 0` for males, and `sex = 1` females. 
+ 4. `dadID`: identification number of father
+ 5. `momID`: identification number of mother
+ 6. `affected`: affection status: `affected = TRUE` if individual has developed lymphoid cancer, and `FALSE` otherwise.
+ 7. `DA1`: paternally inherited allele at the assumed disease locus: `DA1 = 1` if rare variant is present, and `0` otherwise.
+ 8. `DA2`: maternally inherited allele at the assumed disease locus: `DA2 = 1` if rare variant is present, and `0` otherwise.
+ 9. `birthYr`: the individual's birth year.
+ 10. `onsetYr`: the individual's year of disease onset, when applicable.
+ 11. `deathYr`: the individual's year of death, when applicable.
+ 12. `RR`: the individual's relative-risk of disease.
+ 13. `available`: availability status: `available = TRUE` if individual is recalled by proband, and `FALSE` otherwise.  We note that, by default, all marry-ins are unavailable since we do not simulate life events for marry-ins.
+ 14. `Gen`: the individual's generation number relative to the eldest pedigree founder.  That is, the eldest founder will have `Gen = 1`, his or her offspring will have `Gen = 2`, etc. 
+ 15. `proband`: a proband identifier: `proband = TRUE` if the individual is the proband, and `FALSE` otherwise.
+
+\newpage
+To plot pedigrees we use the `plot` function. 
+```{r, fig.height = 6.5, fig.width = 6.5}
+# Plot the ascertained pedigree
+plot(ascPed, location = "bottomleft")
+```
+
+The legend, in the lower left corner of the plot, provides information for the shading seen in certain pedigree members.   Looking at the legend, we see that individuals who are affected by disease (IDs 1, 3, and 7) are indicated by a solid shading in the upper left third of their symbol.  The proband (ID 3) is indicated by shading in the lower third the symbol.  Individuals who have inherited a causal variant (IDs 1, 3, 4, 7, 6, and 9) have shading in the upper right third of their symbol.
+ \newpage
+Often, there is additional individual information we would like to display with the pedigree; for example: an individual's age of onset, and their age at death or their current age at a given reference year.  We can create age labels at the year 2017 by supplying the argument `ref_year = 2017` to the `plot` function.
+```{r, fig.height = 6.5, fig.width = 6.5}
+# Plot the pedigree, with age labels, in 2017.
+plot(ascPed, ref_year = 2017,
+     location = "bottomleft",
+     cex = 0.75, symbolsize = 1.15,
+     mar = c(1, 2, 3, 2))
+```
+When `ref_year` is supplied, additional information will be plotted when possible.  If year of birth is provided, the pedigree will contain an age identifier for individuals who are alive at the specified reference year.  When both year of birth and year of death are provided, the individual's year of birth and death will be displayed instead.  If year of disease-onset data is provided, the disease-onset age will be displayed below individuals who have experienced disease-onset by the selected reference year.  For example, the pedigree member with ID 1 was born in 1914,  died in 1959, and experienced disease onset at age 38.
+
+\newpage
+It is important to note that the pedigree may have been quite different at the time of ascertainment.  We assume that ascertainment occurred during the same calendar year that the proband experienced disease onset. If we supply the argument `ref_year = ascYr` to the `plot` function it will plot the pedigree, with age labels, at the time of ascertainment.
+
+```{r, fig.height = 5.5, fig.width = 6.5}
+# Plot the pedigrees, with age labels,
+# at the time of ascertainment.
+plot(ascPed, ref_year = "ascYr",
+     location = "bottomleft",
+     cex = 0.75, symbolsize = 1.15,
+     mar = c(1, 2, 3, 2))
+```
+
+Looking at the pedigree above, we see that in 2009, only 2 family members had experienced onset of lymphoid cancer: the proband (the pedigree member with ID 3) and her mother (ID 1).  Referring to the 2017 pedigree, we see that four years after the pedigree was ascertained the proband's nephew (ID 7)  experienced disease disease at age 26.
+
+\newpage
+Occasionally, it is of interest for researchers to assign generation numbers among affected family members that reflect their distance from the most recent common ancestor with whom all could share a variant identical by descent (IBD).  For example, consider a family with two affected members.  If the affected relatives are a parent and a child, then the parent would be assigned generation 1 and the child generation 2.  If instead, the affected relatives were a pair of siblings, each would be assigned generation 2, since their parents would represent generation 1.  
+
+The `reassign_gen` function provided with the `SimRVPedigree` package may be used to accomplish this task, provided no inbreeding or loops are present in the pedigree.  We illustrate the behavior of this function by applying it to two of the pedigrees in the `EgPeds` data set. 
+
+```{r, fig.height = 6, fig.width = 8}
+# load the EgPeds dataset
+data(EgPeds)
+class(EgPeds)
+
+# create a ped object 
+Bped1 <- new.ped(subset(EgPeds, FamID == 1))
+
+# Re-assign the generation numbers and store as Aped1
+Aped1 <- reassign_gen(Bped1)
+
+# Plot the pedigree before and after generation reassignment.
+# To plot with generation labels, we set gen_lab = TRUE. 
+par(mfrow = c(1, 2))
+plot(Bped1, 
+     gen_lab = TRUE, 
+     plot_legend = FALSE, 
+     mar = c(1, 2, 3, 2))
+mtext("Before Generation Reassignment", side = 3, line = 2)
+
+plot(Aped1, 
+     gen_lab = TRUE, 
+     plot_legend = FALSE, 
+     mar = c(1, 2, 3, 2))
+mtext("After Generation Reassignment", side = 3, line = 2)
+```
+
+Looking at the pedigree after generation reassignment, the most striking observation is the reduction of the pedigree to include only affected members, their parents, and common ancestors.  Additionally, we see that the generation numbers of the affected members have not changed.  This is because the most recent common ancestors of the affected individuals (IDs 6, 8, and 15) are the two eldest founders (IDs 1 and 2).  We note that, since the focus of this assignment scheme is on the affected members, after generation reassignment all unaffected or unavailable family members will have missing generation numbers.
+
+\newpage
+
+In this example, we reassign the generation numbers for the fifth pedigree contained in `EgPeds`.
+
+```{r, fig.height = 5, fig.width = 8}
+# create a ped object from family 5 in EgPeds
+Bped5 <- new.ped(subset(EgPeds, FamID == 5))
+
+# Re-assign the generation numbers and store as Aped5
+Aped5 <- reassign_gen(Bped5)
+
+# Plot the pedigree before and after generation reassignment.
+par(mfrow = c(1, 2))
+plot(Bped5, 
+     gen_lab = TRUE, 
+     plot_legend = FALSE, 
+     mar = c(1, 2, 3, 2))
+mtext("Before Generation Reassignment", side = 3, line = 2)
+
+plot(Aped5, 
+     gen_lab = TRUE, 
+     plot_legend = FALSE, 
+     mar = c(1, 2, 3, 2))
+mtext("After Generation Reassignment", side = 3, line = 2)
+```
+
+In this example, referring to the pedigree before generation reassignment, we see a pair of affected cousins (IDs 15 and 33).  After generation reassignment, each of the cousins is assigned generation 3 since the most recent common ancestors of the affected cousins are their common grandparents (IDs 3 and 9). 
+
+
+#6. Parallel Processing Example<a name="ParProcExample"></a>
+It is important to note that the processing time required to simulate a sample of pedigrees ascertained for multiple affected members is directly related to (1) the rarity of the disease, and (2) arguments specified by the user.  In particular, we expect to see an increase in the required computation time as: 
+
+ 1. the genetic relative-risk, `GRR`, specified by the user approaches 1, particularly for rare diseases,
+ 2. the ascertainment period, `ascertain_span`, narrows,
+ 3. the proband's relative recall probabilities, `recall_probs`, become smaller.
+ 4. the rarity of the disease increases.
+ 
+For details concerning any of the arguments of the `sim_RVped()` function please refer to section 3.
+
+To illustrate the effect of the relative-risk argument on the time required to simulate a pedigree for the family-study described in section 5, the following table lists the average computation times, in minutes, observed over repeated simulations on a Windows OS with an i7-4790 @ 3.60 GHz, 12 GB of RAM, and a C220 SATA AHCI.
+
+relative-risk | Average Computation Time (in minutes) | Number of trials
+------------- | --------------------------------------|-----------------
+1  | 5.43 | 10
+2  | 1.69 | 10
+5  | 0.45 | 10
+10 | 0.16 | 10
+
+Other combinations of simulation settings could also result in longer computation times.  For this reason, when possible, we recommend the use of parallel processing to simulate a large number of pedigrees ascertained for multiple affected members.  
+
+The following parallel processing example uses the `doParallel` [5] and `doRNG` [3] packages to simulate an entire study sample of 150 pedigrees for the family-based study described in section 5.  The following code has been tested on both Windows and Macintosh operating systems, however, slight modifications may be necessary for users working other operating systems. 
+
+```{r, eval = FALSE}
+#Note that parallel processing is achieved using the doParallel package, 
+#however, to ensure that simulations are reproducible we incorporate 
+#the doRNG package.
+
+#assuming they have been installed, the required packages are loaded using the 
+#commands:
+library(doParallel)
+library(doRNG)
+
+# Before we create our cluster, let's determine how many processors are 
+#currently in use using the getDoParWorkers function.  Since we have not created
+#a cluster yet, this function should return 1.
+getDoParWorkers()
+
+#The number of cores available for parallel processing will depend on the 
+#computer.  To determine how many cores are available on your computer,  
+#execute the following command:
+detectCores()
+
+#To run simulations in parallel we must create a cluster and then register the 
+#cluster. The following code illustrates how to create and register a cluster 
+#that will run simulations in parallel on 2 cores.      
+cl <- makeCluster(2)       # create cluster
+registerDoParallel(cl)     # register cluster
+
+#Now that we have set up our cluster, getDoParWorkers() should return 2 instead of 1
+getDoParWorkers()
+
+#To avoid problems, after you are finished using the cluster, you will want to 
+#stop it. This can be achieved by executing the following:
+on.exit(stopCluster(cl))
+#on.exit(stopCluster(cl)) automatically stops the cluster when you end the R 
+#session.  Alternatively, you could execute the command stopCluster(cl) after 
+#the simulation is complete.
+
+
+#To ensure reproducibility, we make use of the %dorng% operator provided by the 
+#doRNG packag in the foreach loop, by specifing a random-number seed after .option.RNG.
+npeds <- 100    #set the number of pedigrees to generate
+RV_peds = foreach(i = seq(npeds),   
+                  .combine = rbind,  
+                  .packages = c("kinship2", "SimRVPedigree"),  
+                  .options.RNG = 1984
+                  ) %dorng% {
+                    sim_RVped(hazard_rates = LC_hazard,
+                              num_affected = 2,
+                              ascertain_span = c(1995, 2010),
+                              GRR = 10, carrier_prob = 0.002,
+                              RVfounder = TRUE,
+                              stop_year = 2017,
+                              recall_probs = c(1),
+                              founder_byears = c(1900, 1920),
+                              FamID = i)[[2]]
+                    }
+```
+
+
+#7. References <a name="Ref"></a>
+[1] Felicitie C. Bell and Michael L. Miller (2005). **Life Tables for the United States Social Security Area, 1900-2100**. Baltimore, Md.: Social Security Administration, Office of the Chief Actuary.
+
+[2] Alexandre Bureau, Samuel G. Younkin, Margaret M. Parker, Joan E. Bailey-Wilson,
+Mary L. Marazita, Jeffrey C. Murray, Elisabeth Mangold, Hasan Albacha-Hejazi,
+Terri H. Beaty, and Ingo Ruczinski (2014). **Inferring rare disease risk variants based on exact probabilities of sharing by multiple affected relatives**.
+	Bioinformatics; Vol. 30, No. 15, pp. 2189–2196.
+	
+[3] Renaud Gaujoux (2017). 
+  **doRNG: Generic Reproducible Parallel Backend for 'foreach' Loops.** 
+  *R package version 1.6.6*
+  https://CRAN.R-project.org/package=doRNG.
+  
+[4] Ken-Ichi Kojima and Therese M. Kelleher. (1962), 
+  **Survival of Mutant Genes**. 
+  The American Naturalist; Vol. 96, No. 891, pp. 329-346. 
+  
+[5] Microsoft Corporation and Steve Weston (2017).
+  **doParallel: Foreach Parallel Adaptor for the 'parallel' Package.** 
+  *R package version 1.0.11.*
+  https://CRAN.R-project.org/package=doParallel.
+
+[6] The Surveillance, Epidemiology, and End Results (SEER) Program. http://seer.cancer.gov/.
+
+[7] Terry M. Therneau and Jason Sinnwell (2015).
+  **kinship2: Pedigree Functions.** 
+  *R package version 1.6.4.* 
+  https://CRAN.R-project.org/package=kinship2.
+
+[8] Elizabeth Thompson (2000). 
+  *Statistical Inference from Genetic Data on Pedigrees*. 
+  NSF-CBMS Regional Conference Series in Probability and Statistics, 6, I-169.
+
+[9] Ellen M. Wijsman (2012). 
+  *The role of large pedigrees in an era of high-throughput sequencing*. 
+  Human Genetics 131, pp. 1555-1563.
+
