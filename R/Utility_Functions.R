@@ -76,19 +76,15 @@ get_gen_labs <- function(x, nlevel){
 find_available_parent <- function(ped, ID){
   if (is.na(ID)) {
     #parent of missing person is also missing
-    return(NA)
+    return(c())
   } else {
     dad <- ped$dadID[ped$ID == ID]
     mom <- ped$momID[ped$ID == ID]
     if (is.na(dad) & is.na(mom)) {
-      #if mom and dad are both missing, then this person is a founder so return NA
-      available_parent <- NA
-    } else if (is.na(ped$dadID[ped$ID == dad]) & is.na(ped$dadID[ped$ID == mom])) {
-      #if both parents have missing parents, i.e. we've reached the
-      # top two founders, return them both
-      available_parent <- c(mom, dad)
+      #if mom and dad are both missing, then this person is a founder so return nothing
+      available_parent <- c()
     } else {
-      available_parent <- ifelse(is.na(ped$dadID[ped$ID == dad]), mom, dad)
+      available_parent <- c(mom, dad)
     }
 
     return(available_parent)
@@ -102,6 +98,7 @@ find_available_parent <- function(ped, ID){
 #' @param ped A ped object
 #' @param ID1 The ID of the first relative
 #' @param ID2 The ID of the second relative
+#' @importFrom kinship2 kinship
 #'
 #' @return The ID of the common ancestor
 #' @export
@@ -111,7 +108,7 @@ find_available_parent <- function(ped, ID){
 #' data(AgeSpecific_Hazards)
 #'
 #'
-#' set.seed(2)
+#' set.seed(5)
 #' ex_ped <- sim_ped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
 #'                   GRR = 10, FamID = 1,
 #'                   founder_byears = c(1800, 1900),
@@ -119,17 +116,17 @@ find_available_parent <- function(ped, ID){
 #'
 #' plot(ex_ped)
 #'
-#' # Find most recent common ancestor of individuals with IDs 14 and 18
-#' find_mrca(ped = ex_ped, ID1 = 14, ID2 = 18)
+#' # Find most recent common ancestor of individuals with IDs 19 and 21
+#' find_mrca(ped = ex_ped, ID1 = 19, ID2 = 21)
 #'
-#' # Note that someone can be their own most recent common ancsetor.
-#' # In the following example, since the individual with ID 10 is the grandfather
-#' # of the individual with ID 22, the find_mrca function returns 10.
-#' find_mrca(ped = ex_ped, ID1 = 22, ID2 = 10)
+#' # Note that someone can be their own most recent common ancestor.
+#' # In the following example, since the individual with ID 8 is the grandmother
+#' # of the individual with ID 21, the find_mrca function returns 8.
+#' find_mrca(ped = ex_ped, ID1 = 8, ID2 = 21)
 #'
 #' # For unrelated individuals, the find_mcra function returns NA
-#' find_mrca(ped = ex_ped, ID1 = 12, ID2 = 10)
-#' find_mrca(ped = ex_ped, ID1 = 21, ID2 = 19)
+#' find_mrca(ped = ex_ped, ID1 = 8, ID2 = 15)
+#' find_mrca(ped = ex_ped, ID1 = 5, ID2 = 4)
 #'
 find_mrca <- function(ped, ID1, ID2){
 
@@ -137,52 +134,57 @@ find_mrca <- function(ped, ID1, ID2){
     stop("\n \n Expecting a ped object. \n Please use new.ped to create an object of class ped.")
   }
 
-  #the following lists will store all of the ancestors of the individuals
-  # with ID1 and ID2, **including themselves**.
-  al1 <- c(ID1)
-  al2 <- c(ID2)
+  #check to see if the individuals are actually related
+  if (kinship(ped2pedigree(ped))[ped$ID == ID1, ped$ID == ID2] == 0) {
+    common_ancestor <- NA
+  } else {
+    #the following lists will store all of the ancestors of the individuals
+    # with ID1 and ID2, **including themselves**.
+    ancestors_ID1 <- c(ID1)
+    ancestors_ID2 <- c(ID2)
 
-  # the following variables are the people for whom we want to
-  # find parents.  We update these in the following while loop.
-  na1 <- ID1
-  na2 <- ID2
-  mrca_found <- FALSE
-  while (mrca_found == FALSE) {
-    if (length(na1) == 1) {
-      al1 <- c(al1, find_available_parent(ped, na1))
-    } else {
-      al1 <- c(al1,
-               unlist(lapply(na1, function(x){find_available_parent(ped, x)})))
-    }
-
-    if (length(na2) == 1) {
-      al2 <- c(al2, find_available_parent(ped, na2))
-    } else {
-      al2 <- c(al2,
-               unlist(lapply(na2, function(x){find_available_parent(ped, x)})))
-    }
-
-    if (length(intersect(al1, al2)) > 0) {
-      #common ancestor is found!
-      common_ancestor <- intersect(al1, al2)
-      mrca_found <- TRUE
-    } else {
-      #no common ancestor, update variables to
-      #the individuals we just added to ancestor lists]
-      if (length(na1) == 1) {
-        na1 <- find_available_parent(ped, na1)
+    # the following variables are the people for whom we want to
+    # find parents.  We update these in the following while loop.
+    find_parent_of_1 <- ID1
+    find_parent_of_2 <- ID2
+    mrca_found <- FALSE
+    while (mrca_found == FALSE) {
+      if (length(find_parent_of_1) == 1) {
+        ancestors_ID1 <- c(ancestors_ID1, find_available_parent(ped, find_parent_of_1))
       } else {
-        na1 <- unlist(lapply(na1, function(x){find_available_parent(ped, x)}))
+        ancestors_ID1 <- c(ancestors_ID1,
+                           unlist(lapply(find_parent_of_1, function(x){find_available_parent(ped, x)})))
       }
 
-      if (length(na2) == 1) {
-        na2 <- find_available_parent(ped, na2)
+      if (length(find_parent_of_2) == 1) {
+        ancestors_ID2 <- c(ancestors_ID2, find_available_parent(ped, find_parent_of_2))
       } else {
-        na2 <- unlist(lapply(na2, function(x){find_available_parent(ped, x)}))
+        ancestors_ID2 <- c(ancestors_ID2,
+                           unlist(lapply(find_parent_of_2, function(x){find_available_parent(ped, x)})))
+      }
+
+      if (length(intersect(ancestors_ID1, ancestors_ID2)) > 0) {
+        #common ancestor is found!
+        common_ancestor <- intersect(ancestors_ID1, ancestors_ID2)
+        mrca_found <- TRUE
+      } else {
+        #no common ancestor, update variables to
+        #the individuals we just added to ancestor lists]
+        if (length(find_parent_of_1) == 1) {
+          find_parent_of_1 <- find_available_parent(ped, find_parent_of_1)
+        } else {
+          find_parent_of_1 <- unlist(lapply(find_parent_of_1, function(x){find_available_parent(ped, x)}))
+        }
+
+        if (length(find_parent_of_2) == 1) {
+          find_parent_of_2 <- find_available_parent(ped, find_parent_of_2)
+        } else {
+          find_parent_of_2 <- unlist(lapply(find_parent_of_2, function(x){find_available_parent(ped, x)}))
+        }
+
       }
 
     }
-
   }
 
   return(common_ancestor)

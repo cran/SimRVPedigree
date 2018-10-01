@@ -21,6 +21,7 @@
 #' @param current_age Numeric. The individual's current age.
 #' @param disease_status Numeric. The individual's disease status, where \code{disease_status = 1} if individual has experienced disease onset, otherwise \code{disease_status = 0}.
 #' @param lambda_birth Numeric. The individual's birth rate.
+#' @param birth_range Numeric vector of length 2. The minimum and maximum allowable ages, in years, between which this individual may reproduce.
 #' @inheritParams sim_RVped
 #' @inheritParams sim_life
 #'
@@ -34,9 +35,7 @@
 #'
 get_nextEvent = function(current_age, disease_status, RV_status,
                          hazard_rates, GRR, carrier_prob,
-                         lambda_birth = c(18, 45),
-                         birth_range = c(2, 4/7),
-                         fert = 1){
+                         lambda_birth, birth_range, fert = 1){
 
   RR <- ifelse(RV_status, GRR, 1)
 
@@ -64,7 +63,7 @@ get_nextEvent = function(current_age, disease_status, RV_status,
   nyear_birth <- rexp(1, lambda_birth*fert*disease_status + lambda_birth*(1 - disease_status))
   t_birth <- ifelse((current_age < birth_range[1] &
                        nyear_birth + birth_range[1] <= birth_range[2]),
-                    nyear_birth + birth_range[1],
+                    nyear_birth + birth_range[1] - current_age,
                     ifelse((current_age >= birth_range[1] &
                               (nyear_birth + current_age) <= birth_range[2]),
                            nyear_birth,
@@ -109,8 +108,7 @@ get_nextEvent = function(current_age, disease_status, RV_status,
 #'
 #'  \item We assume that, given an individual's current age, their time to death is the waiting time in a non-homogeneous Poisson process with age-specific hazard rate determined by their affection status.  We assume that disease-affected individuals experience death according to the age-specific hazard rate for death in the \emph{affected} population.  On the other hand, we assume that \emph{unaffected} individuals experience death according to the age-specific hazard rate for death in the \emph{unaffected} population.  If the disease of interest is sufficiently rare, the user may choose to substitute the \emph{population} age-specific hazard rate for death for the aforementioned age-specific hazard rate for death in the \emph{unaffected} population.  The user is expected to supply age-specific hazard rates of death for both the \emph{affected} and \emph{unaffected} populations.
 #'
-#'  \item We assume that, given an individual's current age, their time to reproduction is the waiting time in a homogeneous Poisson process.  That is, we assume that individuals reproduce at uniform rate during their reproductive years.  For example, one's reproductive years may span from age 18 to age 45 years.  We do not allow for offspring to be produced outside of an individual's \code{birth_range}.
-#'
+#'  \item We assume that, given an individual's current age, their time to reproduction is the waiting time in a homogeneous Poisson process.  That is, we assume that individuals reproduce at uniform rate during their reproductive years.  For example, one's reproductive years may span from age 20 to age 35 years.  To mimic observed age-specific fertility data, the birth range for an individual is simulated as follows: first we sample the lower bound uniformly from ages 16 to 27, next we sample the range of the birth span uniformly from 10 to 18 years and add this value to the lower bound to determine the upper bound of the birth range.  We do not allow for offspring to be produced outside of an individual's simulated reproductive birth span.
 #'  }
 #'
 #'
@@ -138,8 +136,9 @@ get_nextEvent = function(current_age, disease_status, RV_status,
 #'
 #' # The following commands simulate all life events for an individual, who
 #' # has NOT inherited a causal variant, born in 1900.  From the output, this
-#' # individual has 2 children: one in 1927, and one in 1934, and dies in 1987.
-#' set.seed(7664)
+#' # individual has two children, one in 1921 and another in 1923, and then
+#' # dies in 1987.
+#' set.seed(135)
 #' sim_life(hazard_rates = my_HR, GRR = 10,
 #'          carrier_prob = 0.002,
 #'          RV_status = FALSE,
@@ -148,30 +147,25 @@ get_nextEvent = function(current_age, disease_status, RV_status,
 #' # Using the same random seed, notice how life events can vary for
 #' # someone who has inherited the causal variant, which carries a
 #' # relative-risk of 10. From the output, this individual also has
-#' # 1 child in 1927, but then experiences disease onset in 1976,
-#' # and dies in 1978.
-#' set.seed(7664)
+#' # two children, but then experiences disease onset in 1974,
+#' # and dies in 1976.
+#' set.seed(135)
 #' sim_life(hazard_rates = my_HR, GRR = 10,
 #'                carrier_prob = 0.002,
 #'                RV_status = TRUE,
 #'                YOB = 1900, stop_year = 2000)
 #'
-#'
 sim_life = function(hazard_rates, GRR, carrier_prob,
                     RV_status, YOB, stop_year,
-                    birth_range = c(18, 45),
                     NB_params = c(2, 4/7),
-                    fert = 1){
+                    fert = 1, birth_range = NULL){
 
   if(!is.hazard(hazard_rates)) {
     stop("hazard_rates must be an object of class hazard")
   }
 
-  if (length(birth_range) != 2 |
-      birth_range[1] >= birth_range[2] |
-      birth_range[1] <= 0 |
-      birth_range[2] >= hazard_rates$partition[length(hazard_rates$partition)]){
-    stop ('Please provide appropriate values for birth_range.')
+  if (!is.null(birth_range)) {
+    warning("The argument birth_range has been deprecated. Execute help(sim_life) for details.")
   }
 
   if (GRR <= 0) {
@@ -186,6 +180,8 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
     warning ('fert > 1 detected. \n Are you sure you want to increase fertility after disease-onset?')
   }
 
+
+
   #initialize lists to store event times and types
   R_life <- c(0)
   R_life_names  <- c("Start")
@@ -194,15 +190,22 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
   #initialize disease status, start age at minumum age permissable under part
   DS <- F; t <- min_age; yr <- YOB
 
+  #sample the minimum and maximum reproductive ages.
+  B_range <- c(NA, NA)
+  B_range[1] <- round(runif(1, min = 16, max = 27))
+  B_range[2] <- B_range[1] + round(runif(1, min = 10, max = 18))
+
   #generate and store the birth rate for this individual
   B_lambda <- rgamma(1, shape = NB_params[1],
-                       scale = (1-NB_params[2])/NB_params[2])/(birth_range[2] -
-                                                                 birth_range[1])
+                     scale = (1-NB_params[2])/NB_params[2])/(B_range[2] -
+                                                               B_range[1])
+
   while(t < max_age & yr <= stop_year){
     #generate next event
     l_event <- get_nextEvent(current_age = t, disease_status = DS, RV_status,
                              hazard_rates, GRR, carrier_prob,
-                             lambda_birth = B_lambda, birth_range, fert)
+                             lambda_birth = B_lambda, birth_range = B_range,
+                             fert)
 
     if(yr + l_event[[1]] <= stop_year){
       #add to previous life events
@@ -224,6 +227,7 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
         yr <- yr + l_event[[1]]
       }
     } else {
+      #if event is after stop date, increment yr to stop while loop
       yr <- yr + l_event[[1]]
     }
 

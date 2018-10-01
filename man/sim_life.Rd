@@ -5,7 +5,7 @@
 \title{Simulate all life events}
 \usage{
 sim_life(hazard_rates, GRR, carrier_prob, RV_status, YOB, stop_year,
-  birth_range = c(18, 45), NB_params = c(2, 4/7), fert = 1)
+  NB_params = c(2, 4/7), fert = 1, birth_range = NULL)
 }
 \arguments{
 \item{hazard_rates}{An object of class \code{hazard}, created by \code{\link{hazard}}.}
@@ -20,11 +20,11 @@ sim_life(hazard_rates, GRR, carrier_prob, RV_status, YOB, stop_year,
 
 \item{stop_year}{Numeric. The last year of study.  If not supplied, defaults to the current year.}
 
-\item{birth_range}{Numeric vector of length 2. The minimum and maximum allowable ages, in years, between which individuals may reproduce.  By default, \code{c(18, 45)}.}
-
 \item{NB_params}{Numeric vector of length 2. The size and probability parameters of the negative binomial distribution used to model the number of children per household.  By default, \code{NB_params}\code{ = c(2, 4/7)}, due to the investigation of Kojima and Kelleher (1962).}
 
 \item{fert}{Numeric.  A constant used to rescale the fertility rate after disease-onset. By default, \code{fert = 1}.}
+
+\item{birth_range}{This argument is depreciated.}
 }
 \value{
 A named matrix containing the years of an individual's simulated life events, named by event type, see details.
@@ -41,9 +41,8 @@ We make the following assumptions regarding the simulation of waiting times:
 
 \item We assume that, given an individual's current age, their time to death is the waiting time in a non-homogeneous Poisson process with age-specific hazard rate determined by their affection status.  We assume that disease-affected individuals experience death according to the age-specific hazard rate for death in the \emph{affected} population.  On the other hand, we assume that \emph{unaffected} individuals experience death according to the age-specific hazard rate for death in the \emph{unaffected} population.  If the disease of interest is sufficiently rare, the user may choose to substitute the \emph{population} age-specific hazard rate for death for the aforementioned age-specific hazard rate for death in the \emph{unaffected} population.  The user is expected to supply age-specific hazard rates of death for both the \emph{affected} and \emph{unaffected} populations.
 
-\item We assume that, given an individual's current age, their time to reproduction is the waiting time in a homogeneous Poisson process.  That is, we assume that individuals reproduce at uniform rate during their reproductive years.  For example, one's reproductive years may span from age 18 to age 45 years.  We do not allow for offspring to be produced outside of an individual's \code{birth_range}.
-
-}
+\item We assume that, given an individual's current age, their time to reproduction is the waiting time in a homogeneous Poisson process.  That is, we assume that individuals reproduce at uniform rate during their reproductive years.  For example, one's reproductive years may span from age 20 to age 35 years.  To mimic observed age-specific fertility data, the birth range for an individual is simulated as follows: first we sample the lower bound uniformly from ages 16 to 27, next we sample the range of the birth span uniformly from 10 to 18 years and add this value to the lower bound to determine the upper bound of the birth range.  We do not allow for offspring to be produced outside of an individual's simulated reproductive birth span.
+ }
 
 \code{sim_life} will return a named matrix, which contains the years of the simulated life events, named by event type.  The possible event types are as follows:
 \itemize{
@@ -58,8 +57,9 @@ my_HR <- hazard(hazardDF = AgeSpecific_Hazards)
 
 # The following commands simulate all life events for an individual, who
 # has NOT inherited a causal variant, born in 1900.  From the output, this
-# individual has 2 children: one in 1927, and one in 1934, and dies in 1987.
-set.seed(7664)
+# individual has two children, one in 1921 and another in 1923, and then
+# dies in 1987.
+set.seed(135)
 sim_life(hazard_rates = my_HR, GRR = 10,
          carrier_prob = 0.002,
          RV_status = FALSE,
@@ -68,14 +68,13 @@ sim_life(hazard_rates = my_HR, GRR = 10,
 # Using the same random seed, notice how life events can vary for
 # someone who has inherited the causal variant, which carries a
 # relative-risk of 10. From the output, this individual also has
-# 1 child in 1927, but then experiences disease onset in 1976,
-# and dies in 1978.
-set.seed(7664)
+# two children, but then experiences disease onset in 1974,
+# and dies in 1976.
+set.seed(135)
 sim_life(hazard_rates = my_HR, GRR = 10,
                carrier_prob = 0.002,
                RV_status = TRUE,
                YOB = 1900, stop_year = 2000)
-
 
 }
 \references{

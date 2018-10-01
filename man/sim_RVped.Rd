@@ -6,8 +6,8 @@
 \usage{
 sim_RVped(hazard_rates, GRR, num_affected, ascertain_span, FamID,
   founder_byears, stop_year = NULL, recall_probs = NULL,
-  carrier_prob = 0.002, RVfounder = FALSE, birth_range = c(18, 45),
-  NB_params = c(2, 4/7), fert = 1, first_diagnosis = NULL)
+  carrier_prob = 0.002, RVfounder = FALSE, NB_params = c(2, 4/7),
+  fert = 1, first_diagnosis = NULL, birth_range = NULL)
 }
 \arguments{
 \item{hazard_rates}{An object of class \code{hazard}, created by \code{\link{hazard}}.}
@@ -30,13 +30,13 @@ sim_RVped(hazard_rates, GRR, num_affected, ascertain_span, FamID,
 
 \item{RVfounder}{Logical.  Indicates if all pedigrees segregate the rare, causal variant.  By default, \code{RVfounder = FALSE} See details.}
 
-\item{birth_range}{Numeric vector of length 2. The minimum and maximum allowable ages, in years, between which individuals may reproduce.  By default, \code{c(18, 45)}.}
-
 \item{NB_params}{Numeric vector of length 2. The size and probability parameters of the negative binomial distribution used to model the number of children per household.  By default, \code{NB_params}\code{ = c(2, 4/7)}, due to the investigation of Kojima and Kelleher (1962).}
 
 \item{fert}{Numeric.  A constant used to rescale the fertility rate after disease-onset. By default, \code{fert = 1}.}
 
 \item{first_diagnosis}{Numeric. The first year that reliable diagnoses can be obtained regarding disease-affection status.  By default, \code{first_diagnosis}\code{ = NULL} so that all diagnoses are considered reliable. See details.}
+
+\item{birth_range}{This argument is depreciated.}
 }
 \value{
 A list containing the following data frames:
@@ -81,22 +81,26 @@ In the event that a trimmed pedigree fails the \code{num_affected} condition,  \
 data(AgeSpecific_Hazards)
 
 #Simulate pedigree ascertained for multiple affected individuals
-set.seed(1960)
+set.seed(2)
 ex_RVped <- sim_RVped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
-                      GRR = 10,
+                      GRR = 20,
                       RVfounder = TRUE,
                       FamID = 1,
-                      founder_byears = c(1900, 1920),
+                      founder_byears = c(1900, 1905),
                       ascertain_span = c(1995, 2015),
                       num_affected = 2,
                       stop_year = 2017,
                       recall_probs = c(1, 1, 0))
 
+# Observe: ex_RVped is a list containing two ped objects
+summary(ex_RVped)
 
-# Original pedigree prior to proband selection and trimming
+# The first is the original pedigree prior
+# to proband selection and trimming
 plot(ex_RVped[[1]])
 
-# The ascertained pedigree
+# The second is the ascertained pedigree which
+# has been trimmed based on proband recall
 plot(ex_RVped[[2]])
 summary(ex_RVped[[2]])
 
@@ -108,7 +112,7 @@ summary(ex_RVped[[2]])
 
 }
 \references{
-Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (14 December 2017) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. bioRxiv 234153.
+Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
 
 Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 

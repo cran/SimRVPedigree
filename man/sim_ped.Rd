@@ -5,8 +5,8 @@
 \title{Simulate a pedigree}
 \usage{
 sim_ped(hazard_rates, GRR, FamID, founder_byears, stop_year = NULL,
-  carrier_prob = 0.002, RVfounder = FALSE, birth_range = c(18, 45),
-  NB_params = c(2, 4/7), fert = 1)
+  carrier_prob = 0.002, RVfounder = FALSE, NB_params = c(2, 4/7),
+  fert = 1, birth_range = NULL)
 }
 \arguments{
 \item{hazard_rates}{An object of class \code{hazard}, created by \code{\link{hazard}}.}
@@ -23,11 +23,11 @@ sim_ped(hazard_rates, GRR, FamID, founder_byears, stop_year = NULL,
 
 \item{RVfounder}{Logical.  Indicates if all pedigrees segregate the rare, causal variant.  By default, \code{RVfounder = FALSE} See details.}
 
-\item{birth_range}{Numeric vector of length 2. The minimum and maximum allowable ages, in years, between which individuals may reproduce.  By default, \code{c(18, 45)}.}
-
 \item{NB_params}{Numeric vector of length 2. The size and probability parameters of the negative binomial distribution used to model the number of children per household.  By default, \code{NB_params}\code{ = c(2, 4/7)}, due to the investigation of Kojima and Kelleher (1962).}
 
 \item{fert}{Numeric.  A constant used to rescale the fertility rate after disease-onset. By default, \code{fert = 1}.}
+
+\item{birth_range}{This argument is depreciated.}
 }
 \value{
 The simulated pedigree.
@@ -47,30 +47,36 @@ When segregating in the pedigree, the rare variant is transmitted from parent to
 }
 \section{See Also}{
 
-\code{\link{sim_RVped}}
+\code{\link{sim_RVped}}, \code{\link{sim_life}}
 }
 
 \examples{
 data(AgeSpecific_Hazards)
 
-#Simulate a random pedigree
-set.seed(22)
+# Simulate a random pedigree
+set.seed(5)
 ex_ped <- sim_ped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
                   GRR = 10,
                   FamID = 1,
                   founder_byears = c(1900, 1910),
                   stop_year = 2015)
 
+# View the simulated pedigree
 ex_ped
-plot(ex_ped, location = "bottomleft")
+
+# Plot the pedigree
+plot(ex_ped, location = "topleft")
+
+# Plot the pedigree, this time with age labels for
+# all descendents of the starting founder (ID 1)
 plot(ex_ped, ref_year = 2015,
      cex= 0.75, symbolsize = 1.25,
-     location = "bottomleft")
+     location = "topleft")
 
-summary(ex_ped)
 
-#Simulate a random pedigree
-set.seed(22)
+# Simulate a random pedigree. This time set RVfounder to TRUE so that
+# the eldest introduces a causal rare variant with probability 1.
+set.seed(5)
 ex_ped <- sim_ped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
                   RVfounder = TRUE,
                   GRR = 10,
@@ -78,15 +84,15 @@ ex_ped <- sim_ped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
                   founder_byears = c(1900, 1910),
                   stop_year = 2015)
 
-ex_ped
-plot(ex_ped)
+
+# Plot the pedigree with age labels
 plot(ex_ped, ref_year = 2015,
-     cex= 0.75, symbolsize = 1.25)
-summary(ex_ped)
+     cex= 0.75, symbolsize = 1.25,
+     location = "topleft")
 
 }
 \references{
-Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (14 December 2017) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. bioRxiv 234153.
+Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
 
 Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 

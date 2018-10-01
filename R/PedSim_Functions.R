@@ -67,8 +67,7 @@ sim_founderRVstatus <- function(GRR, carrier_prob, RVfounder){
 create_founder = function(FamID, GRR, carrier_prob,
                           RVfounder, founder_byears){
 
-  founder_dat <- sim_founderRVstatus(GRR, carrier_prob,
-                                     RVfounder)
+  founder_dat <- sim_founderRVstatus(GRR, carrier_prob, RVfounder)
 
   new_founder_info <- data.frame(FamID = FamID,
                                  ID = 1,
@@ -185,8 +184,8 @@ create_offspring = function(dad_info, mom_info, byear, last_id, GRR){
 #' additional information for mate and offspring, when offspring are generated.
 #'
 sim_nFam = function(found_info, stop_year, last_id,
-                    hazard_rates, birth_range, NB_params,
-                    GRR, carrier_prob, RVfounder, fert){
+                    hazard_rates, NB_params, GRR,
+                    carrier_prob, RVfounder, fert){
 
   nfam_ped <- found_info
 
@@ -194,7 +193,7 @@ sim_nFam = function(found_info, stop_year, last_id,
   sim_years <- sim_life(hazard_rates, GRR, carrier_prob,
                         RV_status = any(found_info[, c(7:8)] == 1),
                         YOB = found_info$birthYr, stop_year,
-                        birth_range, NB_params, fert)
+                        NB_params, fert)
 
 
 
@@ -227,6 +226,8 @@ sim_nFam = function(found_info, stop_year, last_id,
     dad <- nfam_ped[which(nfam_ped$sex == 0), ]
     mom <- nfam_ped[which(nfam_ped$sex == 1), ]
 
+
+    #add a child for each birth event
     for (k in 1:length(birth_events)) {
       #add child
       new_child <- create_offspring(dad_info = dad, mom_info = mom,
@@ -234,6 +235,7 @@ sim_nFam = function(found_info, stop_year, last_id,
       nfam_ped <- rbind(nfam_ped, new_child[[1]])
       last_id <- new_child[[2]]
     }
+
   }
 
   #set do_sim to FALSE for individual whose life events we just simulated
@@ -264,34 +266,40 @@ sim_nFam = function(found_info, stop_year, last_id,
 #' @export
 #' @importFrom stats runif
 #'
-#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (14 December 2017) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. bioRxiv 234153.
+#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
 #' @references Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 #' @references Alexandre Bureau, Samuel G. Younkin, Margaret M. Parker, Joan E. Bailey-Wilson, Mary L. Marazita, Jeffrey C. Murray, Elisabeth Mangold, Hasan Albacha-Hejazi, Terri H. Beaty, and Ingo Ruczinski (2014). \emph{Inferring rare disease risk variants based on exact probabilities of sharing by multiple affected relatives.} Bioinformatics; Vol. 30, No. 15, pp. 2189-2196.
 #'
 #' @section See Also:
-#' \code{\link{sim_RVped}}
+#' \code{\link{sim_RVped}}, \code{\link{sim_life}}
 #'
 #' @examples
 #' data(AgeSpecific_Hazards)
 #'
-#' #Simulate a random pedigree
-#' set.seed(22)
+#' # Simulate a random pedigree
+#' set.seed(5)
 #' ex_ped <- sim_ped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
 #'                   GRR = 10,
 #'                   FamID = 1,
 #'                   founder_byears = c(1900, 1910),
 #'                   stop_year = 2015)
 #'
+#' # View the simulated pedigree
 #' ex_ped
-#' plot(ex_ped, location = "bottomleft")
+#'
+#' # Plot the pedigree
+#' plot(ex_ped, location = "topleft")
+#'
+#' # Plot the pedigree, this time with age labels for
+#' # all descendents of the starting founder (ID 1)
 #' plot(ex_ped, ref_year = 2015,
 #'      cex= 0.75, symbolsize = 1.25,
-#'      location = "bottomleft")
+#'      location = "topleft")
 #'
-#' summary(ex_ped)
 #'
-#' #Simulate a random pedigree
-#' set.seed(22)
+#' # Simulate a random pedigree. This time set RVfounder to TRUE so that
+#' # the eldest introduces a causal rare variant with probability 1.
+#' set.seed(5)
 #' ex_ped <- sim_ped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
 #'                   RVfounder = TRUE,
 #'                   GRR = 10,
@@ -299,19 +307,19 @@ sim_nFam = function(found_info, stop_year, last_id,
 #'                   founder_byears = c(1900, 1910),
 #'                   stop_year = 2015)
 #'
-#' ex_ped
-#' plot(ex_ped)
+#'
+#' # Plot the pedigree with age labels
 #' plot(ex_ped, ref_year = 2015,
-#'      cex= 0.75, symbolsize = 1.25)
-#' summary(ex_ped)
+#'      cex= 0.75, symbolsize = 1.25,
+#'      location = "topleft")
 #'
 sim_ped = function(hazard_rates, GRR,
                    FamID, founder_byears, stop_year = NULL,
                    carrier_prob = 0.002,
                    RVfounder = FALSE,
-                   birth_range = c(18, 45),
                    NB_params = c(2, 4/7),
-                   fert = 1){
+                   fert = 1,
+                   birth_range = NULL){
 
   if(!(RVfounder %in% c(T, F))){
     stop ('Please set RVfounder to TRUE or FALSE.')
@@ -323,8 +331,12 @@ sim_ped = function(hazard_rates, GRR,
     warning('carrier_prob > 0.01: sim_RVped is intended for simulating the transmission of rare variants.')
   }
 
-  if(is.null(stop_year)){
+  if (is.null(stop_year)){
     stop_year <- as.numeric(format(Sys.Date(),'%Y'))
+  }
+
+  if (!is.null(birth_range)) {
+    warning("The argument birth_range has been deprecated. Execute help(sim_life) for details.")
   }
 
   fam_ped <- create_pedFile()
@@ -340,7 +352,7 @@ sim_ped = function(hazard_rates, GRR,
     for (k in 1:length(re_sim)) {
       newKin <- sim_nFam(found_info = fam_ped[which(fam_ped$ID == re_sim[k]),],
                          stop_year, last_id,
-                         hazard_rates, birth_range, NB_params,
+                         hazard_rates, NB_params,
                          GRR, carrier_prob,
                          RVfounder, fert)
 

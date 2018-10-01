@@ -40,7 +40,7 @@ legend("topleft", title = "Population", legend = c("General", "Affected"),
 
 ## ------------------------------------------------------------------------
 # simulate an ascertained pedigree 
-set.seed(3170)
+set.seed(23985)
 ex_RVped <- sim_RVped(hazard_rates = LC_hazard,
                       num_affected = 2,
                       ascertain_span = c(1995, 2010),
@@ -70,12 +70,12 @@ head(ascPed, n = 2)
 
 ## ---- fig.height = 6.5, fig.width = 6.5----------------------------------
 # Plot the ascertained pedigree
-plot(ascPed, location = "bottomleft")
+plot(ascPed, location = "topleft")
 
 ## ---- fig.height = 6.5, fig.width = 6.5----------------------------------
 # Plot the pedigree, with age labels, in 2017.
 plot(ascPed, ref_year = 2017,
-     location = "bottomleft",
+     location = "topleft",
      cex = 0.75, symbolsize = 1.15,
      mar = c(1, 2, 3, 2))
 
@@ -83,7 +83,7 @@ plot(ascPed, ref_year = 2017,
 # Plot the pedigrees, with age labels,
 # at the time of ascertainment.
 plot(ascPed, ref_year = "ascYr",
-     location = "bottomleft",
+     location = "topleft",
      cex = 0.75, symbolsize = 1.15,
      mar = c(1, 2, 3, 2))
 

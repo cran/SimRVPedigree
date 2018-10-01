@@ -123,7 +123,7 @@ choose_proband = function(ped_file, num_affected, ascertain_span, first_diagnosi
 #' @seealso \code{\link{sim_RVped}}, \code{\link{sim_ped}}, \code{\link{new.ped}}
 #' @export
 #'
-#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (14 December 2017) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. bioRxiv 234153.
+#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
 #' @references Thompson, E. (2000). \emph{Statistical Inference from Genetic Data on Pedigrees.} NSF-CBMS Regional Conference Series in Probability and Statistics, 6, I-169.
 #'
 #' @importFrom kinship2 kinship
@@ -366,17 +366,17 @@ ascertain_ped <- function(ped_file, num_affected, ascertain_span, recall_probs =
 #' @param FamID Numeric. The family ID to assign to the simulated pedigree.
 #' @param recall_probs Numeric. The proband's recall probabilities for relatives, see details.  If not supplied, the default value of four times kinship coefficient between the proband and the relative is used.
 #' @param stop_year Numeric. The last year of study.  If not supplied, defaults to the current year.
-#' @param birth_range Numeric vector of length 2. The minimum and maximum allowable ages, in years, between which individuals may reproduce.  By default, \code{c(18, 45)}.
 #' @param NB_params Numeric vector of length 2. The size and probability parameters of the negative binomial distribution used to model the number of children per household.  By default, \code{NB_params}\code{ = c(2, 4/7)}, due to the investigation of Kojima and Kelleher (1962).
 #' @param fert Numeric.  A constant used to rescale the fertility rate after disease-onset. By default, \code{fert = 1}.
 #' @param first_diagnosis Numeric. The first year that reliable diagnoses can be obtained regarding disease-affection status.  By default, \code{first_diagnosis}\code{ = NULL} so that all diagnoses are considered reliable. See details.
+#' @param birth_range This argument is depreciated.
 #'
 #' @return  A list containing the following data frames:
 #' @return \item{\code{full_ped} }{The full pedigree, prior to proband selection and trimming.}
 #' @return \item{\code{ascertained_ped} }{The ascertained pedigree, with proband selected and trimmed according to proband recall probability.  See details.}
 #' @export
 #'
-#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (14 December 2017) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. bioRxiv 234153.
+#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
 #' @references Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 #' @references Thompson, E. (2000). \emph{Statistical Inference from Genetic Data on Pedigrees.} NSF-CBMS Regional Conference Series in Probability and Statistics, 6, I-169.
 #'
@@ -389,22 +389,26 @@ ascertain_ped <- function(ped_file, num_affected, ascertain_span, recall_probs =
 #' data(AgeSpecific_Hazards)
 #'
 #' #Simulate pedigree ascertained for multiple affected individuals
-#' set.seed(1960)
+#' set.seed(2)
 #' ex_RVped <- sim_RVped(hazard_rates = hazard(hazardDF = AgeSpecific_Hazards),
-#'                       GRR = 10,
+#'                       GRR = 20,
 #'                       RVfounder = TRUE,
 #'                       FamID = 1,
-#'                       founder_byears = c(1900, 1920),
+#'                       founder_byears = c(1900, 1905),
 #'                       ascertain_span = c(1995, 2015),
 #'                       num_affected = 2,
 #'                       stop_year = 2017,
 #'                       recall_probs = c(1, 1, 0))
 #'
+#' # Observe: ex_RVped is a list containing two ped objects
+#' summary(ex_RVped)
 #'
-#' # Original pedigree prior to proband selection and trimming
+#' # The first is the original pedigree prior
+#' # to proband selection and trimming
 #' plot(ex_RVped[[1]])
 #'
-#' # The ascertained pedigree
+#' # The second is the ascertained pedigree which
+#' # has been trimmed based on proband recall
 #' plot(ex_RVped[[2]])
 #' summary(ex_RVped[[2]])
 #'
@@ -421,10 +425,10 @@ sim_RVped = function(hazard_rates, GRR,
                      recall_probs = NULL,
                      carrier_prob = 0.002,
                      RVfounder = FALSE,
-                     birth_range = c(18, 45),
                      NB_params = c(2, 4/7),
                      fert = 1,
-                     first_diagnosis = NULL){
+                     first_diagnosis = NULL,
+                     birth_range = NULL){
 
   if(!(RVfounder %in% c(FALSE, TRUE))){
     stop ('Please set RVfounder to TRUE or FALSE.')
@@ -443,7 +447,7 @@ sim_RVped = function(hazard_rates, GRR,
     warning('Setting GRR < 1 can significantly increase computation time')
   }
 
-  if(!missing(recall_probs)) {
+  if (!missing(recall_probs)) {
     if (any(recall_probs > 1) | any(recall_probs < 0) ){
       stop ('recall probabilities must be between 0 and 1')
     } else if (any(recall_probs != cummin(recall_probs))){
@@ -453,14 +457,18 @@ sim_RVped = function(hazard_rates, GRR,
     }
   }
 
-  if(is.null(stop_year)){
+  if (is.null(stop_year)){
     stop_year <- as.numeric(format(Sys.Date(),'%Y'))
   }
 
-  if(!is.null(first_diagnosis)) {
+  if (!is.null(first_diagnosis)) {
     if(first_diagnosis >= ascertain_span[1]) {
       stop("first_diagnosis >= ascertainment_span[1], \n Please re-define the ascertainment span so that all diagnoses within this time frame are considered reliable.")
     }
+  }
+
+  if (!is.null(birth_range)) {
+    warning("The argument birth_range has been deprecated. Execute help(sim_life) for details.")
   }
 
   ascertained <- FALSE
@@ -468,7 +476,7 @@ sim_RVped = function(hazard_rates, GRR,
     #generate pedigree
     fam_ped <- sim_ped(hazard_rates, GRR, FamID,
                        founder_byears, stop_year, carrier_prob,
-                       RVfounder, birth_range, NB_params, fert)
+                       RVfounder, NB_params, fert)
 
     #check to see if pedigree is ascertained
     check_pedigree <- ascertain_ped(ped_file = fam_ped, num_affected,
