@@ -1,3 +1,17 @@
+#' Calculate the onset hazard for an individual
+#'
+#' Calculate the onset hazard rate of disease for an individual given the carrier probability and the genetic relative risk for the subtype and the individual's RV status.
+#'
+#' @inheritParams sim_life
+#' @param sub_hazard The hazard rate of disease for the subtype of interest
+#' @param sub_GRR The genetic relative risk of disease for the subtype of interest.
+#'
+#' @return The baseline age-specific hazard rates of disease
+#' @keywords internal
+get_onsetHazard <- function(sub_hazard, sub_GRR, carrier_prob, RV_status){
+  (sub_hazard/(1 + carrier_prob*(sub_GRR - 1)))*ifelse(RV_status, sub_GRR, 1)
+}
+
 #' Simulate the next life event
 #'
 #' Primarily intended as an internal function, \code{get_nextEvent} randomly simulates an individual's next life event given their current age, disease status, and relative-risk of disease.
@@ -37,63 +51,73 @@ get_nextEvent = function(current_age, disease_status, RV_status,
                          hazard_rates, GRR, carrier_prob,
                          lambda_birth, birth_range, fert = 1){
 
-  RR <- ifelse(RV_status, GRR, 1)
+  #set the number of subtypes to simulate
+  num_subs <- length(hazard_rates$subtype_ID)
 
-  # Assuming that the person is not yet affected, simulate the waiting time
-  # until onset given current age
-  t_onset <- ifelse(disease_status, NA,
-                    get_wait_time(p = runif(1), last_event = current_age,
-                                  hazard = hazard_rates[[1]][, 1]*RR/(1 + carrier_prob*(GRR - 1)),
-                                  part = hazard_rates[[2]]))
+  event_type <- "retry"
+  while (event_type == "retry"){
+    #Multi-Subtype option
+    #If diseased set time to onset to NA. (lines 50-51)
+    #Otherwise, simulate the waiting time to each subtype
+    t_onset <- ifelse(rep(disease_status, num_subs),
+                      rep(NA, num_subs),
+                      sapply(1:num_subs, function(x){
+                        get_wait_time(p = runif(1), last_event = current_age,
+                                      hazard = get_onsetHazard(sub_hazard = hazard_rates[[1]][, x],
+                                                               sub_GRR = GRR[x],
+                                                               carrier_prob, RV_status),
+                                      part = hazard_rates[[2]])
+                      }))
 
-  #simulate the waiting time until death given current age.
-  t_death <- get_wait_time(p = runif(1),
-                           last_event = current_age,
-                           hazard = hazard_rates[[1]][, (2 + 1*disease_status)],
-                           part = hazard_rates[[2]], scale = TRUE)
+    #simulate the waiting time until death given current age.
+    t_death <- get_wait_time(p = runif(1),
+                             last_event = current_age,
+                             hazard = hazard_rates[[1]][, (2 + 1*disease_status)],
+                             part = hazard_rates[[2]], scale = TRUE)
 
-  # Want to adjust the waiting time until birth based on current age
-  # and also ensure that birth cannot occur after the maximum birth age
+    # Want to adjust the waiting time until birth based on current age
+    # and also ensure that birth cannot occur after the maximum birth age
 
-  # First condition handles the case when person is less than the minimum
-  # birth age when this occurs we return current age + waiting time
-  # so long as this value is less than the maximum birth age
-  # Second condition deals with people who have reached the minimum birth age,
-  # if neiter is met we return NA
-  nyear_birth <- rexp(1, lambda_birth*fert*disease_status + lambda_birth*(1 - disease_status))
-  t_birth <- ifelse((current_age < birth_range[1] &
-                       nyear_birth + birth_range[1] <= birth_range[2]),
-                    nyear_birth + birth_range[1] - current_age,
-                    ifelse((current_age >= birth_range[1] &
-                              (nyear_birth + current_age) <= birth_range[2]),
-                           nyear_birth,
-                           NA))
+    # First condition handles the case when person is less than the minimum
+    # birth age when this occurs we return current age + waiting time
+    # so long as this value is less than the maximum birth age
+    # Second condition deals with people who have reached the minimum birth age,
+    # if neiter is met we return NA
+    nyear_birth <- rexp(1, lambda_birth*fert*disease_status + lambda_birth*(1 - disease_status))
+    t_birth <- ifelse((current_age < birth_range[1] &
+                         nyear_birth + birth_range[1] <= birth_range[2]),
+                      nyear_birth + birth_range[1] - current_age,
+                      ifelse((current_age >= birth_range[1] &
+                                (nyear_birth + current_age) <= birth_range[2]),
+                             nyear_birth,
+                             NA))
 
-  #create list of simulated times
-  times <- c(t_birth, t_onset, t_death)
+    #create list of simulated times
+    times <- c(t_birth, t_onset, t_death)
 
-  #find the smallest waiting time
-  min_time <- which.min(times)
-  duplicate_times <- anyDuplicated(times)
+    #create event vector and corresponding subtype vector
+    events <- c("Child", rep("Onset", num_subs), "Death")
+    sub_lab <- c(NA, hazard_rates$subtype_ID, NA)
 
-  if (duplicate_times == 0 | sum(is.na(times)) == 2) {
-    # nyears <- as.matrix(times[[which.min(times)]], ncol = 1)
-    # colnames(nyears) <- c(paste(names(which.min(times))))
 
-    t_event <- times[min_time]
-    event_type <- ifelse(min_time == 1, "Child",
-                        ifelse(min_time == 2, "Onset", "Death"))
 
-  } else if (times[duplicate_times] != times[min_time]) {
-    t_event <- times[min_time]
-    event_type <- ifelse(min_time == 1, "Child",
-                        ifelse(min_time == 2, "Onset", "Death"))
-  } else {
-    t_event <- 0
-    event_type <- "retry"
+    #find the smallest waiting time
+    min_time <- which.min(times)
+    duplicate_times <- anyDuplicated(times, incomparables = NA)
+
+    # check to see if there are any ties,
+    # if not store winning event and, if
+    # applicable, the subtype
+    if (duplicate_times != 0) {
+      event_type <- "retry"
+    } else {
+      t_event    <- times[min_time]
+      event_type <- events[min_time]
+      sub_ID     <- sub_lab[min_time]
+    }
   }
 
-  return(list(t_event, event_type))
+  return(list(t_event, event_type, sub_ID))
 }
 
 #' Simulate all life events
@@ -112,20 +136,29 @@ get_nextEvent = function(current_age, disease_status, RV_status,
 #'  }
 #'
 #'
-#' \code{sim_life} will return a named matrix, which contains the years of the simulated life events, named by event type.  The possible event types are as follows:
+#' The events simulated by \code{sim_life} are labelled as follows:
 #' \itemize{
+#'  \item "Start" the individual's year of birth.
 #'  \item "Child" a reproductive event, i.e. creation of offspring
 #'  \item "Onset" disease onset event,
 #'  \item "Death" death event
 #' }
 #'
+#'
 #' @param YOB A positive number. The indivdiual's year of birth.
 #' @param RV_status Numeric. \code{RV_status = TRUE} if the individual is a carrier of a rare variant that increases disease suseptibility, and \code{FALSE} otherwise.
 #' @inheritParams sim_RVped
 #'
-#' @return A named matrix containing the years of an individual's simulated life events, named by event type, see details.
+#' @return an object of class \code{event}.  An object of class \code{event} is a list that contains the following items.
+#' @return \item{\code{life_events} }{A named numeric vector of life events, see details.}
+#' @return \item{\code{repro_events} }{A vector of reproduction years, that is the year(s) that the individual produces offspring.  When the individual does not reproduce \code{repro_events = NULL}.}
+#' @return \item{\code{onset_event} }{Numeric. When applicable the year of disease-onset. When onset does not occur \code{onset_event = NA}}
+#' @return \item{\code{death_event} }{Numeric. When applicable the year of death. When death is censored \code{death_event = NA}}
+#' @return \item{\code{subtype} }{Character. When applicable, the disease subtype.}
+#' @return \item{\code{censor_year} }{Numeric. When applicable the last year that data was observed. Note: after death \code{censor_year = NA}}
+
 #'
-#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (14 December 2017) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. bioRxiv 234153.
+#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko (2018). \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. Source Code for Biology and Medicine, 13:2.
 #' @references Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 #' @export
 #' @importFrom stats rgamma
@@ -134,7 +167,7 @@ get_nextEvent = function(current_age, disease_status, RV_status,
 #' data(AgeSpecific_Hazards)
 #' my_HR <- hazard(hazardDF = AgeSpecific_Hazards)
 #'
-#' # The following commands simulate all life events for an individual, who
+#' # The following commands simulate all life events for an individual who
 #' # has NOT inherited a causal variant, born in 1900.  From the output, this
 #' # individual has two children, one in 1921 and another in 1923, and then
 #' # dies in 1987.
@@ -155,20 +188,28 @@ get_nextEvent = function(current_age, disease_status, RV_status,
 #'                RV_status = TRUE,
 #'                YOB = 1900, stop_year = 2000)
 #'
+#' # The following commands simulate life events for an individual who
+#' # has inherited a causal rare variant, with relative risk 100 for
+#' # the subtype "HL" and no increased relative risk for the subtype"NHL".
+#' set.seed(1)
+#' sim_life(hazard_rates = hazard(SubtypeHazards,
+#'                                subtype_ID = c("HL", "NHL")),
+#'          GRR = c(100, 1),
+#'          carrier_prob = 0.002,
+#'          RV_status = TRUE,
+#'          YOB = 1900, stop_year = 2000)
+#'
+#'
 sim_life = function(hazard_rates, GRR, carrier_prob,
                     RV_status, YOB, stop_year,
                     NB_params = c(2, 4/7),
-                    fert = 1, birth_range = NULL){
+                    fert = 1){
 
   if(!is.hazard(hazard_rates)) {
     stop("hazard_rates must be an object of class hazard")
   }
 
-  if (!is.null(birth_range)) {
-    warning("The argument birth_range has been deprecated. Execute help(sim_life) for details.")
-  }
-
-  if (GRR <= 0) {
+  if (any(GRR <= 0)) {
     stop ('GRR must be greater than 0')
   }
 
@@ -181,6 +222,12 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
   }
 
 
+  if (length(hazard_rates$subtype_ID) > 1 & length(GRR) == 1) {
+    stop('please ensure that GRR has one item for each subtype')
+  } else if (length(GRR) != length(hazard_rates$subtype_ID)) {
+    stop('length(GRR) != length(subtype_counts)\n please ensure that GRR contains one entry for each subtype')
+  }
+
 
   #initialize lists to store event times and types
   R_life <- c(0)
@@ -189,6 +236,20 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
   max_age <- max(hazard_rates[[2]])
   #initialize disease status, start age at minumum age permissable under part
   DS <- F; t <- min_age; yr <- YOB
+
+  #initialize events
+  repro_events <- NULL
+  death_event  <- NA
+  onset_event  <- NA
+  subtype      <- NA
+  #onset_age    <- NA
+  #death_age    <- NA
+
+  #initialize event locations
+  death_ID <- NA
+  onset_ID <- NA
+  repro_IDs <- c()
+
 
   #sample the minimum and maximum reproductive ages.
   B_range <- c(NA, NA)
@@ -200,12 +261,14 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
                      scale = (1-NB_params[2])/NB_params[2])/(B_range[2] -
                                                                B_range[1])
 
+  counter <- 1
   while(t < max_age & yr <= stop_year){
     #generate next event
     l_event <- get_nextEvent(current_age = t, disease_status = DS, RV_status,
                              hazard_rates, GRR, carrier_prob,
                              lambda_birth = B_lambda, birth_range = B_range,
                              fert)
+    counter <- counter + 1
 
     if(yr + l_event[[1]] <= stop_year){
       #add to previous life events
@@ -215,16 +278,19 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
       if (l_event[[2]] == "Death") {
         #if death occurs stop simulation by setting t = 100
         t <- max_age
+        death_ID <- counter
       } else if (l_event[[2]] == "Onset") {
         #if onset occurs change disease status and continue
         t  <- t + l_event[[1]]
         yr <- yr + l_event[[1]]
         DS <- T
+        subtype <- l_event[[3]]
+        onset_ID <- counter
       } else {
-        #otherwise, increment counter, handles both birth event and case when no
-        # event occurs (i.e. retry)
+        #otherwise, handle birth events
         t <- t + l_event[[1]]
         yr <- yr + l_event[[1]]
+        repro_IDs <- repro_IDs <- c(repro_IDs, counter)
       }
     } else {
       #if event is after stop date, increment yr to stop while loop
@@ -233,8 +299,29 @@ sim_life = function(hazard_rates, GRR, carrier_prob,
 
   }
 
-  life_events <- matrix(round(cumsum(as.numeric(R_life))) + YOB, nrow = 1)
-  colnames(life_events) <- R_life_names
-  return(life_events)
+  life_events <- round(cumsum(as.numeric(R_life)) + YOB)
 
+  if (length(repro_IDs) > 0) repro_events <- life_events[repro_IDs]
+  if (!is.na(onset_ID)) {
+    onset_event <- life_events[onset_ID]
+    onset_age <- onset_event - YOB
+  }
+
+  if (!is.na(death_ID)) {
+    death_event <- life_events[death_ID]
+    death_age <- death_event - YOB
+  }
+
+  names(life_events) <- R_life_names
+
+  evt_obj <- list(life_events = life_events,
+                  repro_events = repro_events,
+                  onset_event = onset_event,
+                  death_event = death_event,
+                  subtype = subtype,
+                  censor_year = stop_year)
+  #onset_age = onset_age,
+  #death_age = death_age)
+
+  return(events(evt_obj))
 }

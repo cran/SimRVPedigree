@@ -17,9 +17,10 @@ create_pedFile = function(){
              birthYr = numeric(),
              onsetYr = numeric(),
              deathYr = numeric(),
-             RR = numeric(),
+             #RR = numeric(),
              available = logical(),
              Gen = numeric(),
+             subtype = character(),
              do_sim = logical(),
              stringsAsFactors = FALSE)
 }
@@ -34,11 +35,11 @@ create_pedFile = function(){
 #' @keywords internal
 #'
 sim_founderRVstatus <- function(GRR, carrier_prob, RVfounder){
-  if (GRR == 1) {
+  if (all(GRR == 1)) {
     # If GRR (genetic relative risk) = 1, the variant is not associated with
     # the disease; hence we do not allow an RV to segregate in the pedigree
     d_locus <- c(0, 0)
-    fRR <- 1
+    fRR <- rep(1, length(GRR))
   } else if (RVfounder == FALSE){
     # If FALSE has been selected we allow the founder
     # the opportunity to introduce 1 copy of the RV with
@@ -46,13 +47,14 @@ sim_founderRVstatus <- function(GRR, carrier_prob, RVfounder){
     # update intro_RV appropriately
     d_locus <- sample(x = c(0, ifelse(runif(1) <= carrier_prob, 1, 0)),
                       size = 2, replace = F)
-    fRR <- ifelse(any(d_locus == 1), GRR, 1)
+    fRR <- ifelse(rep(any(d_locus == 1), length(GRR)), GRR, rep(1, length(GRR)))
   } else if (RVfounder == TRUE){
     d_locus <- sample(x = c(0, 1), size = 2, replace = F)
     fRR <- GRR
   }
 
-  founder_dat <- list(d_locus, fRR)
+founder_dat <- list(d_locus, fRR)
+  #founder_dat <- d_locus
   return(founder_dat)
 }
 
@@ -82,9 +84,10 @@ create_founder = function(FamID, GRR, carrier_prob,
                                                        max = founder_byears[2])),
                                  onsetYr = NA,
                                  deathYr = NA,
-                                 RR = founder_dat[[2]],
+                                 #RR = founder_dat[[2]],
                                  available = T,
                                  Gen = 1,
+                                 subtype = NA,
                                  do_sim = T,
                                  stringsAsFactors = FALSE)
 
@@ -106,7 +109,7 @@ create_founder = function(FamID, GRR, carrier_prob,
 #'
 #'
 create_mate = function(partner_info, last_id,
-                       GRR, carrier_prob,
+                       carrier_prob,
                        RVfounder){
 
   new_mate_info <- data.frame(FamID = partner_info$FamID,
@@ -120,9 +123,10 @@ create_mate = function(partner_info, last_id,
                               birthYr = NA,
                               onsetYr = NA,
                               deathYr = NA,
-                              RR = 1,
+                              #RR = 1,
                               available = F,
                               Gen = partner_info$Gen,
+                              subtype = NA,
                               do_sim = F,
                               stringsAsFactors = FALSE)
 
@@ -159,13 +163,13 @@ create_offspring = function(dad_info, mom_info, byear, last_id, GRR){
                                birthYr = byear,
                                onsetYr = NA,
                                deathYr = NA,
-                               RR = NA,
+                               #RR = NA,
                                available = T,
                                Gen = dad_info$Gen + 1,
+                               subtype = NA,
                                do_sim = T,
                                stringsAsFactors = FALSE)
-  new_child_info$RR <- ifelse(sum(new_child_info$DA1, new_child_info$DA2) == 0,
-                              1, GRR)
+  #new_child_info$RR <- ifelse(sum(new_child_info$DA1, new_child_info$DA2) == 0, 1, GRR)
   child_return <- list(new_child_info, last_id + 1)
   return(child_return)
 }
@@ -191,33 +195,33 @@ sim_nFam = function(found_info, stop_year, last_id,
 
   #Simulate life steps for founder
   sim_years <- sim_life(hazard_rates, GRR, carrier_prob,
-                        RV_status = any(found_info[, c(7:8)] == 1),
+                        RV_status = any(found_info[, 7:8] == 1),
                         YOB = found_info$birthYr, stop_year,
                         NB_params, fert)
 
 
 
   # update disease status and onset year if onset occured prior to stop_year
-  if (is.element("Onset", colnames(sim_years))) {
+  if (!is.na(sim_years$onset_event)) {
     nfam_ped$affected <- T
-    nfam_ped$onsetYr <- sim_years[colnames(sim_years) == "Onset"]
+    nfam_ped$onsetYr <- sim_years$onset_event
+    nfam_ped$subtype <- sim_years$subtype
   } else {
     nfam_ped$affected <- F
   }
 
   # update death status and death year if onset occured prior to stop_year
-  if (is.element("Death", colnames(sim_years))) {
-    nfam_ped$deathYr <- sim_years[colnames(sim_years) == "Death"]
+  if (!is.na(sim_years$death_event)) {
+    nfam_ped$deathYr <- sim_years$death_event
   }
 
   #store the birth years of each child
-  birth_events <- sim_years[colnames(sim_years) == "Child"]
+  birth_events <- sim_years$repro_events
 
-  if (length(birth_events) > 0) {
+  if (!is.null(birth_events)) {
     #add a mate
     new_mate <- create_mate(partner_info = nfam_ped[1,], last_id,
-                            GRR, carrier_prob,
-                            RVfounder)
+                            carrier_prob, RVfounder)
 
     nfam_ped <- rbind(nfam_ped, new_mate[[1]])
     last_id <- new_mate[[2]]
@@ -266,7 +270,7 @@ sim_nFam = function(found_info, stop_year, last_id,
 #' @export
 #' @importFrom stats runif
 #'
-#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
+#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko (2018). \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. Source Code for Biology and Medicine, 13:2.
 #' @references Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 #' @references Alexandre Bureau, Samuel G. Younkin, Margaret M. Parker, Joan E. Bailey-Wilson, Mary L. Marazita, Jeffrey C. Murray, Elisabeth Mangold, Hasan Albacha-Hejazi, Terri H. Beaty, and Ingo Ruczinski (2014). \emph{Inferring rare disease risk variants based on exact probabilities of sharing by multiple affected relatives.} Bioinformatics; Vol. 30, No. 15, pp. 2189-2196.
 #'
@@ -318,8 +322,7 @@ sim_ped = function(hazard_rates, GRR,
                    carrier_prob = 0.002,
                    RVfounder = FALSE,
                    NB_params = c(2, 4/7),
-                   fert = 1,
-                   birth_range = NULL){
+                   fert = 1){
 
   if(!(RVfounder %in% c(T, F))){
     stop ('Please set RVfounder to TRUE or FALSE.')
@@ -335,13 +338,9 @@ sim_ped = function(hazard_rates, GRR,
     stop_year <- as.numeric(format(Sys.Date(),'%Y'))
   }
 
-  if (!is.null(birth_range)) {
-    warning("The argument birth_range has been deprecated. Execute help(sim_life) for details.")
-  }
-
   fam_ped <- create_pedFile()
   fam_ped[1, ] <- create_founder(FamID, GRR, carrier_prob,
-                                 RVfounder, founder_byears)
+                                 RVfounder, founder_byears)[1, ]
 
   last_id <- 1
   last_gen <- 1
@@ -368,5 +367,7 @@ sim_ped = function(hazard_rates, GRR,
 
   rownames(fam_ped) <- NULL
 
-  return(ped(fam_ped[, c(1:14)]))
+  #return all pedigree fields, except for do_sim and subtype,
+  #unless multiple subtypes are simulated
+  return(ped(fam_ped[, c(1:(13 + (length(hazard_rates$subtype_ID) > 1)))]))
 }

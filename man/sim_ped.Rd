@@ -6,12 +6,12 @@
 \usage{
 sim_ped(hazard_rates, GRR, FamID, founder_byears, stop_year = NULL,
   carrier_prob = 0.002, RVfounder = FALSE, NB_params = c(2, 4/7),
-  fert = 1, birth_range = NULL)
+  fert = 1)
 }
 \arguments{
 \item{hazard_rates}{An object of class \code{hazard}, created by \code{\link{hazard}}.}
 
-\item{GRR}{Numeric. The genetic relative-risk of disease, i.e. the relative-risk of disease for individuals who carry at least one copy of the causal variant.}
+\item{GRR}{Numeric. The genetic relative-risk of disease, i.e. the relative-risk of disease for individuals who carry at least one copy of the causal variant.  Note: When simulating diseases with multiple subtypes \code{GRR} must contain one entry for each simulated subtype.  See details.}
 
 \item{FamID}{Numeric. The family ID to assign to the simulated pedigree.}
 
@@ -26,8 +26,6 @@ sim_ped(hazard_rates, GRR, FamID, founder_byears, stop_year = NULL,
 \item{NB_params}{Numeric vector of length 2. The size and probability parameters of the negative binomial distribution used to model the number of children per household.  By default, \code{NB_params}\code{ = c(2, 4/7)}, due to the investigation of Kojima and Kelleher (1962).}
 
 \item{fert}{Numeric.  A constant used to rescale the fertility rate after disease-onset. By default, \code{fert = 1}.}
-
-\item{birth_range}{This argument is depreciated.}
 }
 \value{
 The simulated pedigree.
@@ -92,7 +90,7 @@ plot(ex_ped, ref_year = 2015,
 
 }
 \references{
-Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
+Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko (2018). \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. Source Code for Biology and Medicine, 13:2.
 
 Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 

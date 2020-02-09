@@ -2,7 +2,7 @@
 #'
 #' Create an object of class \code{ped}, from a \code{data.frame}, required input for \code{\link{reassign_gen}}, \code{\link{censor_ped}}, and \code{\link{trim_ped}} functions.
 #'
-#' The data frame supplied to \code{new.ped}, \code{ped_file}, \emph{must} contain the following columns:
+#' The data frame supplied to \code{new.ped}, \code{ped_file}, \emph{must} contain the following variables:
 #' \tabular{lll}{
 #' \strong{name} \tab \strong{type} \tab \strong{description} \cr
 #' \code{FamID} \tab numeric \tab family identification number \cr
@@ -14,7 +14,7 @@
 #' \tab \tab \code{affected = TRUE} if affected by disease, and \code{FALSE} otherwise, \cr
 #' }
 #'
-#' Optionally, \code{ped_file} \emph{may} contain any of the following columns:
+#' Optionally, \code{ped_file} \emph{may} contain any of the following variables:
 #' \tabular{lll}{
 #' \strong{name} \tab \strong{type}\tab \strong{description} \cr
 #' \code{available} \tab logical \tab availibility status; \cr
@@ -31,6 +31,7 @@
 #' \tab \tab For the eldest founder \code{Gen} = 1, for his or her offspring \code{Gen} = 2, etc. \cr
 #' \code{proband} \tab logical \tab proband identifier: \cr
 #' \tab \tab \code{proband = TRUE} if individual is the proband, and \code{FALSE} otherwise.\cr
+#' \code{subtype} \tab character \tab the individual's disease subtype, when applicable, otherwise \code{NA} \cr
 #' }
 #'
 #' \emph{We note that some of the optional fields above may be required for various ped functions}
@@ -106,6 +107,10 @@ is.ped <- function(x) {
 #' \code{aveIBD}\tab average of the pairwise IBD probabilities among the disease-affected relatives\cr
 #' \code{ascertainYear}\tab the year the pedigree was ascertained\cr
 #' \code{segRV} \tab logical Indicates whether or not pedigree segregates a causal variant. \cr \tab If the pedigree segregates the variant \code{segRV = TRUE}.\cr
+#' \code{p_subtypeLabel} \tab NOTE: this is only listed when pedigrees contain relatives affected by multiple subtypes. \cr
+#'                       \tab the proportion of disease-affected relatives in the family with the specified subtype.\cr
+#'                       \tab Here "subtypeLabel" is determined by subtype ID specifed by the user when creating the \cr
+#'                       \tab \code{\link{hazard}} object.\cr
 #' }
 #'
 #' The second item returned by \code{summary.ped} is called \code{affected_info}, and contains the following fields for each disease-affected relative supplied.
@@ -116,8 +121,10 @@ is.ped <- function(x) {
 #' \code{birthYr}\tab the individual's birth year, when applicable, otherwise \code{NA} \cr
 #' \code{onsetYr}\tab the individual's year of disease onset, when applicable, otherwise \code{NA} \cr
 #' \code{deathYr}\tab the individual's year of death, when applicable, otherwise \code{NA} \cr
-#' \code{RR}\tab the individual's relative-risk of disease \cr
 #' \code{proband}\tab a proband identifier: \code{proband = TRUE} if the individual is the proband, and \code{FALSE} otherwise.\cr
+#' \code{RVstatus}\tab the individual's causal RV status; set to 1 if individual is a carrier, and 0 otherwise.\cr
+#' \code{subtype}\tab NOTE: this is only listed when pedigree was simulated for diseases with multiple subtypes.\cr
+#'               \tab The individual's disease subtype.\cr
 #' }
 #'
 #' @param object An object of class ped.
@@ -126,6 +133,8 @@ is.ped <- function(x) {
 #' @return \item{\code{family_info} }{A data frame containing family specific variables for each pedigree supplied.  See details.}
 #' @return \item{\code{affected_info} }{A data frame containing information for the affected individuals in each pedigree supplied.  See details.}
 #' @export
+#'
+#' @importFrom stats na.omit
 #'
 #' @examples
 #' #Read in age-specific harard data and create hazard object.
@@ -162,8 +171,16 @@ is.ped <- function(x) {
 summary.ped <- function(object, ...) {
   n <- length(unique(object$FamID))
 
+  #gather subtype information, when applicable
+  if ("subtype" %in% colnames(object)) {
+    s_ID <- unique(na.omit(object$subtype))
+  } else {
+    s_ID <- NULL
+  }
+
+
   famdat <- lapply(unique(object$FamID), function(y){
-    get_famInfo(object[object$FamID == y, ])
+    get_famInfo(object[object$FamID == y, ], s_ID)
   })
 
   afdat <- lapply(unique(object$FamID), function(y){
@@ -252,10 +269,25 @@ plot.ped <- function(x, ref_year = NULL, gen_lab = FALSE,
                      gen_stretch = 2, cex = 1, adj = 1, line = 2,
                      mar = c(5.1, 4.1, 4.1, 2.1), ...) {
 
+
+
   if (is.null(ref_year)) {
-    # If no ref_year provided simply plot the pedigree with the usual id lables.
+    # If ref_year is not provided
+    # plot the pedigree with ID and subtype lables, when present.
     k2ped <- ped2pedigree(x)
-    pedLabs <- x$ID
+
+    if (!is.na(match("subtype", colnames(x)))) {
+      # Create a death age label for individuals who have died.
+      Sub_lab <- ifelse(is.na(x$subtype),
+                        "", paste0("\n subtype: ",
+                                   x$subtype))
+
+      pedLabs = paste0("ID: ", sep = "", x$ID,
+                       Sub_lab)
+    } else {
+      pedLabs <- x$ID
+    }
+
   } else if (ref_year == "ascYr") {
     if(!("proband" %in% colnames(x))){
       stop("\n \n Proband not detected, cannot determine ascertainment year. \n Please supply ref_year. \n")
@@ -314,10 +346,6 @@ plot.ped <- function(x, ref_year = NULL, gen_lab = FALSE,
           at = seq(par("usr")[4],
                    par("usr")[3] - diff(par("usr")[4:3])/(gen_stretch*nlevel),
                    length.out = nlevel))
-    ## used for planning, delete before release
-    # abline(h = seq(par("usr")[4],
-    #                par("usr")[3] - diff(par("usr")[4:3])/(gen_stretch*nlevel),
-    #                length.out = nlevel))
   }
 
   #reset plot margins the default settings

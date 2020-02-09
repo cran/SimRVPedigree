@@ -1,4 +1,7 @@
+library(SimRVPedigree)
 context("choose_proband")
+
+data("AgeSpecific_Hazards")
 test_that("returns a dataframe with the proband variable with a single proband", {
   RVped <- sim_RVped(hazard_rates = hazard(AgeSpecific_Hazards),
                      GRR = 50, carrier_prob = 0.002,
@@ -7,7 +10,7 @@ test_that("returns a dataframe with the proband variable with a single proband",
                      num_affected = 2,
                      recall_probs = c(1),
                      founder_byears = c(1900, 1980),
-                     ascertain_span = c(1970, 2015))[[1]][, c(1:14)]
+                     ascertain_span = c(1970, 2015))[[1]]
 
   Tped = choose_proband(ped_file = RVped, num_affected = 2,
                         ascertain_span = c(1970, 2015),
@@ -25,7 +28,7 @@ test_that("The proband is an affected and experienced onset during the ascertain
                      num_affected = 2,
                      recall_probs = c(1),
                      founder_byears = c(1900, 1970),
-                     ascertain_span = c(1980, 2015))[[1]][, c(1:14)]
+                     ascertain_span = c(1980, 2015))[[1]]
 
   Tped = choose_proband(ped_file = RVped, num_affected = 2,
                         ascertain_span = c(1970, 2015),

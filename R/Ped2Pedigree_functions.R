@@ -17,7 +17,7 @@ ped2pedigree <- function(x){
   dA_loc <- match(c("DA1", "DA2"), colnames(x))
 
   if (length(dA_loc[!is.na(dA_loc)]) == 2) {
-    x$RVstatus <- x$DA1 + x$DA2
+    x$RVstatus <- ifelse(x$DA1 + x$DA2 == 0, 0, 1)
   }
 
   if (any(!is.na(match(c("affected", "proband", "RVstatus"), colnames(x))))) {
@@ -66,8 +66,6 @@ ped2pedigree <- function(x){
 #' @references Terry M Therneau and Jason Sinnwell (2015). \strong{kinship2: Pedigree Functions.} \emph{R package version 1.6.4.} https://CRAN.R-project.org/package=kinship2
 pedigreeLabels <- function(x, ref_year){
 
-  m <- length(unique(x$FamID))
-
   #create pedigree labels that reflect age data, when appropriate
   if(!missing(ref_year) & !is.na(match(c("birthYr"), colnames(x)))){
 
@@ -101,8 +99,17 @@ pedigreeLabels <- function(x, ref_year){
       Oage_lab <- rep("", nrow(x))
     }
 
+    if (!is.na(match("subtype", colnames(x)))) {
+      # Create a death age label for individuals who have died.
+      Sub_lab <- ifelse(is.na(x$subtype),
+                         "", paste0("\n subtype: ",
+                                    x$subtype))
+    } else {
+      Sub_lab <- rep("", nrow(x))
+    }
+
     ped_labs = paste0("ID: ", sep = "", x$ID,
-                    age_lab, Dage_lab, Oage_lab)
+                    age_lab, Dage_lab, Oage_lab, Sub_lab)
   } else {
     ped_labs = x$ID
   }

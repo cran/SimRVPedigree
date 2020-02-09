@@ -19,7 +19,7 @@
 #' @importFrom kinship2 align.pedigree
 #' @importFrom utils combn
 #'
-#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (24 September 2018) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. <doi:10.1101/234153>.
+#' @references Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko (2018). \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. Source Code for Biology and Medicine, 13:2.
 #' @references Thompson, E. (2000). \emph{Statistical Inference from Genetic Data on Pedigrees.} NSF-CBMS Regional Conference Series in Probability and Statistics, 6, I-169.
 #'
 #' @examples
@@ -329,7 +329,7 @@ get_affectedInfo <- function(ped_file){
 
   keep_cols <- match(c("FamID", "ID",
                        "birthYr", "onsetYr", "deathYr",
-                       "RR", "proband", "RVstatus"), colnames(ped_file))
+                       "RR", "proband", "RVstatus", "subtype"), colnames(ped_file))
 
   affected_info <- ped_file[ped_file$affected & ped_file$available,
                             keep_cols[!is.na(keep_cols)]]
@@ -366,11 +366,12 @@ get_kinship <- function(ped_file){
 
 #' Obtain summary information
 #'
-#' @param ped_file
+#' @param ped_file A ped object
+#' @param s_ID A vector of subtype IDs. By default, \code{s_ID = NULL}, which implies there are no subtypes.
 #'
 #' @return A data frame containing the relevant summary information
 #' @keywords internal
-get_famInfo <- function(ped_file){
+get_famInfo <- function(ped_file, s_ID = NULL){
 
   AV <- get_affectedInfo(ped_file)
 
@@ -388,11 +389,25 @@ get_famInfo <- function(ped_file){
   AK <- get_kinship(ped_file)
   AIBD <- ifelse(nrow(AV) > 0, 2*mean(AK[upper.tri(AK)]), NA)
 
-  return(data.frame(FamID = ped_file$FamID[1],
-                    totalRelatives = nrow(ped_file),
-                    numAffected = nrow(AV),
-                    aveOnsetAge = AOO,
-                    aveIBD = AIBD,
-                    ascertainYear = AY,
-                    segRV = SRV))
+
+  FamDat <- data.frame(FamID = ped_file$FamID[1],
+                       totalRelatives = nrow(ped_file),
+                       numAffected = nrow(AV),
+                       aveOnsetAge = AOO,
+                       aveIBD = AIBD,
+                       ascertainYear = AY,
+                       segRV = SRV)
+
+  if (!is.null(s_ID)) {
+    k = length(s_ID)
+    subDat <- as.data.frame(matrix(NA, ncol = k, nrow = 1))
+    colnames(subDat) = paste0("p_", s_ID)
+    subDat[1, ] <- sapply(1:length(s_ID), function(x){
+      sum(AV$subtype == s_ID[x])/nrow(AV)
+      })
+
+    FamDat <- cbind(FamDat, subDat)
+  }
+
+  return(FamDat)
 }

@@ -5,12 +5,12 @@
 \title{Simulate all life events}
 \usage{
 sim_life(hazard_rates, GRR, carrier_prob, RV_status, YOB, stop_year,
-  NB_params = c(2, 4/7), fert = 1, birth_range = NULL)
+  NB_params = c(2, 4/7), fert = 1)
 }
 \arguments{
 \item{hazard_rates}{An object of class \code{hazard}, created by \code{\link{hazard}}.}
 
-\item{GRR}{Numeric. The genetic relative-risk of disease, i.e. the relative-risk of disease for individuals who carry at least one copy of the causal variant.}
+\item{GRR}{Numeric. The genetic relative-risk of disease, i.e. the relative-risk of disease for individuals who carry at least one copy of the causal variant.  Note: When simulating diseases with multiple subtypes \code{GRR} must contain one entry for each simulated subtype.  See details.}
 
 \item{carrier_prob}{Numeric.  The carrier probability for all causal variants with relative-risk of disease \code{GRR}.  By default, \code{carrier_prob}\code{ = 0.002}}
 
@@ -23,11 +23,21 @@ sim_life(hazard_rates, GRR, carrier_prob, RV_status, YOB, stop_year,
 \item{NB_params}{Numeric vector of length 2. The size and probability parameters of the negative binomial distribution used to model the number of children per household.  By default, \code{NB_params}\code{ = c(2, 4/7)}, due to the investigation of Kojima and Kelleher (1962).}
 
 \item{fert}{Numeric.  A constant used to rescale the fertility rate after disease-onset. By default, \code{fert = 1}.}
-
-\item{birth_range}{This argument is depreciated.}
 }
 \value{
-A named matrix containing the years of an individual's simulated life events, named by event type, see details.
+an object of class \code{event}.  An object of class \code{event} is a list that contains the following items.
+
+\item{\code{life_events} }{A named numeric vector of life events, see details.}
+
+\item{\code{repro_events} }{A vector of reproduction years, that is the year(s) that the individual produces offspring.  When the individual does not reproduce \code{repro_events = NULL}.}
+
+\item{\code{onset_event} }{Numeric. When applicable the year of disease-onset. When onset does not occur \code{onset_event = NA}}
+
+\item{\code{death_event} }{Numeric. When applicable the year of death. When death is censored \code{death_event = NA}}
+
+\item{\code{subtype} }{Character. When applicable, the disease subtype.}
+
+\item{\code{censor_year} }{Numeric. When applicable the last year that data was observed. Note: after death \code{censor_year = NA}}
 }
 \description{
 Primarily intended as an internal function, \code{sim_life} simulates all life events for an individual starting at birth, age 0, and ending with death or the end of the study.
@@ -44,8 +54,9 @@ We make the following assumptions regarding the simulation of waiting times:
 \item We assume that, given an individual's current age, their time to reproduction is the waiting time in a homogeneous Poisson process.  That is, we assume that individuals reproduce at uniform rate during their reproductive years.  For example, one's reproductive years may span from age 20 to age 35 years.  To mimic observed age-specific fertility data, the birth range for an individual is simulated as follows: first we sample the lower bound uniformly from ages 16 to 27, next we sample the range of the birth span uniformly from 10 to 18 years and add this value to the lower bound to determine the upper bound of the birth range.  We do not allow for offspring to be produced outside of an individual's simulated reproductive birth span.
  }
 
-\code{sim_life} will return a named matrix, which contains the years of the simulated life events, named by event type.  The possible event types are as follows:
+The events simulated by \code{sim_life} are labelled as follows:
 \itemize{
+ \item "Start" the individual's year of birth.
  \item "Child" a reproductive event, i.e. creation of offspring
  \item "Onset" disease onset event,
  \item "Death" death event
@@ -55,7 +66,7 @@ We make the following assumptions regarding the simulation of waiting times:
 data(AgeSpecific_Hazards)
 my_HR <- hazard(hazardDF = AgeSpecific_Hazards)
 
-# The following commands simulate all life events for an individual, who
+# The following commands simulate all life events for an individual who
 # has NOT inherited a causal variant, born in 1900.  From the output, this
 # individual has two children, one in 1921 and another in 1923, and then
 # dies in 1987.
@@ -76,9 +87,21 @@ sim_life(hazard_rates = my_HR, GRR = 10,
                RV_status = TRUE,
                YOB = 1900, stop_year = 2000)
 
+# The following commands simulate life events for an individual who
+# has inherited a causal rare variant, with relative risk 100 for
+# the subtype "HL" and no increased relative risk for the subtype"NHL".
+set.seed(1)
+sim_life(hazard_rates = hazard(SubtypeHazards,
+                               subtype_ID = c("HL", "NHL")),
+         GRR = c(100, 1),
+         carrier_prob = 0.002,
+         RV_status = TRUE,
+         YOB = 1900, stop_year = 2000)
+
+
 }
 \references{
-Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko. (14 December 2017) \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. bioRxiv 234153.
+Nieuwoudt, Christina and Jones, Samantha J and Brooks-Wilson, Angela and Graham, Jinko (2018). \emph{Simulating Pedigrees Ascertained for Multiple Disease-Affected Relatives}. Source Code for Biology and Medicine, 13:2.
 
 Ken-Ichi Kojima, Therese M. Kelleher. (1962), \emph{Survival of Mutant Genes}. The American Naturalist 96, 329-346.
 }

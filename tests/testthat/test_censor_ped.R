@@ -1,4 +1,7 @@
+library(SimRVPedigree)
 context("censor_ped")
+
+data("AgeSpecific_Hazards")
 test_that("censor_ped returns an error when expected", {
   RVped <- sim_RVped(hazard_rates = hazard(AgeSpecific_Hazards),
                      GRR = 50, carrier_prob = 0.002,
@@ -10,7 +13,7 @@ test_that("censor_ped returns an error when expected", {
                      ascertain_span = c(1980, 2015))[[2]]
 
   #no proband and no censor_year
-  expect_error(censor_ped(RVped[, -15]))
+  expect_error(censor_ped(RVped[, -which(colnames(RVped) %in% "proband")]))
 
   #no censor_year, no onset data for proband, proabnd present
   RVped$onsetYr <- NA
